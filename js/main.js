@@ -1,6 +1,6 @@
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
-import { getFirestore, doc, onSnapshot, setDoc, writeBatch, collection, getDocs, arrayUnion, updateDoc, getDoc, arrayRemove } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+import { getFirestore, doc, onSnapshot, setDoc, writeBatch, collection, getDocs, arrayUnion, updateDoc, getDoc, arrayRemove, addDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 
 // --- CONFIGURAÇÃO ---
 const userFirebaseConfig = {
@@ -40,20 +40,23 @@ const confirmationModal = document.getElementById('confirmation-modal');
 
 // --- VARIÁVEIS GLOBAIS ---
 let app, db, auth;
-let people = [];
+let people = []; 
 let categories = [];
-let fcrCategories = [];
+let fcrCategories = []; 
+let allUsers = []; 
 let localScores = {};
 let localFcrScores = {};
+let localReports = []; // ETAPA 3: Para guardar a lista de reports
 let modalContext = {};
 let agentEvolutionChart, categoryEvolutionChart, fcrVsEscalonadoChart, fcrEscalonadoTrendChart;
 let currentAnalystName = '';
+let currentUserId = ''; 
 let currentUserRole = '';
 let confirmationResolve = null;
 
 // --- CONFIGURAÇÃO GLOBAL DO CHART.JS PARA TEMA ESCURO ---
-Chart.defaults.color = '#CBD5E1'; // Cor padrão para texto (slate-300)
-Chart.defaults.borderColor = '#334155'; // Cor padrão para bordas/linhas (slate-700)
+Chart.defaults.color = '#CBD5E1'; 
+Chart.defaults.borderColor = '#334155';
 
 
 // --- NAVEGAÇÃO E UI ---
@@ -79,8 +82,12 @@ function setupUIForRole(role) {
 
     const menuItems = {
         home: { title: 'Início', icon: 'fa-home', roles: ['admin', 'viewer', 'input', 'n1'], page: 'home-screen' },
-        dashboard: { title: 'Dashboard', icon: 'fa-chart-line', roles: ['admin', 'viewer'], page: 'viewer-content' },
+        // ETAPA 3: Novo item de menu para o Dashboard N1
+        n1Dashboard: { title: 'Meus FCRs', icon: 'fa-user-check', roles: ['n1'], page: 'n1-dashboard-page' },
+        dashboard: { title: 'Dashboard Geral', icon: 'fa-chart-line', roles: ['admin', 'viewer'], page: 'viewer-content' },
         register: { title: 'Registros', icon: 'fa-plus-circle', roles: ['admin', 'input', 'n1'], page: 'register-page' },
+        // ETAPA 3: Novo item de menu para Reports
+        reports: { title: 'Reports', icon: 'fa-file-alt', roles: ['admin', 'viewer'], page: 'reports-page' },
         admin: { title: 'Admin', icon: 'fa-cogs', roles: ['admin'], page: 'admin-panel' }
     };
 
@@ -179,8 +186,10 @@ async function main() {
                 if(userData && userData.role) {
                     currentAnalystName = userData.name || user.email;
                     currentUserRole = userData.role;
+                    currentUserId = user.uid; 
                     userNameDisplay.textContent = currentAnalystName;
                     
+                    await loadAllUsers(); 
                     await loadConfigData();
                     setupUIForRole(currentUserRole);
                     setupFirestoreListener();
@@ -212,14 +221,21 @@ async function fetchUserData(uid) {
     return userDoc.exists() ? userDoc.data() : null;
 }
 
+async function loadAllUsers() {
+    if (currentUserRole !== 'admin') return;
+    const usersCollection = collection(db, "users");
+    const usersSnapshot = await getDocs(usersCollection);
+    allUsers = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
 async function loadConfigData() {
     const configRef = doc(db, `/artifacts/${appId}/public/data/config/settings`);
     const configSnap = await getDoc(configRef);
     if (configSnap.exists()) {
         const configData = configSnap.data();
-        people = configData.people || [];
+        people = configData.people || []; 
         categories = (configData.categories || []).sort((a, b) => b.weight - a.weight);
-        fcrCategories = configData.fcrCategories || [];
+        fcrCategories = configData.fcrCategories || []; 
     } else {
         showStatusMessage('Configuração não encontrada.', 'error');
         people = [];
@@ -228,11 +244,15 @@ async function loadConfigData() {
     }
     populateSelectors();
     createTotalsGrid();
+    if (currentUserRole === 'admin') {
+        renderUserAssociationPanel();
+    }
 }
 
 function setupFirestoreListener() {
     const collectionRef = collection(db, `/artifacts/${appId}/public/data/scores`);
     const fcrCollectionRef = collection(db, `/artifacts/${appId}/public/data/fcr_scores`);
+    const reportsCollectionRef = collection(db, `/artifacts/${appId}/public/data/reports`);
 
     onSnapshot(collectionRef, (querySnapshot) => {
         localScores = {};
@@ -244,7 +264,32 @@ function setupFirestoreListener() {
         localFcrScores = {};
         querySnapshot.forEach((doc) => { localFcrScores[doc.id] = doc.data(); });
         filterAndRenderAll();
+        if (currentUserRole === 'admin') {
+            renderFcrApprovalPanel();
+        }
+        if (currentUserRole === 'n1') {
+            renderMyFcrDashboard();
+        }
     }, (error) => console.error("Erro no listener de FCR:", error));
+
+    // CORREÇÃO: Adicionado um filtro para ignorar documentos sem data
+    onSnapshot(query(reportsCollectionRef), (querySnapshot) => {
+        localReports = [];
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            // Apenas adiciona o report se ele tiver um campo de data
+            if (data && data.date) {
+                localReports.push({ id: doc.id, ...data });
+            }
+        });
+        // Ordena os reports por data (mais recentes primeiro)
+        localReports.sort((a, b) => {
+            const dateA = a.date.split('/').reverse().join('');
+            const dateB = b.date.split('/').reverse().join('');
+            return dateB.localeCompare(dateA);
+        });
+        renderReportsDashboard();
+    }, (error) => console.error("Erro no listener de reports:", error));
 }
 
 async function addProtocolToDB(person, category, protocol) {
@@ -267,7 +312,12 @@ async function addFcrProtocolToDB(person, category, protocol) {
     try {
         const today = new Date();
         const date = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
-        const protocolEntry = { protocol, date, analystName: currentAnalystName };
+        const protocolEntry = { 
+            protocol, 
+            date, 
+            analystName: currentAnalystName,
+            status: 'pendente' 
+        };
         await setDoc(fcrScoreRef, { [category]: arrayUnion(protocolEntry) }, { merge: true });
         showStatusMessage(`Protocolo FCR ${protocol} adicionado para ${person}!`, 'success');
     } catch (e) {
@@ -327,20 +377,21 @@ function filterScoresByPeriod(scores, period) {
 
 function calculateAllWeights(filteredScores) {
     const personWeights = {};
-    people.forEach(person => {
+    people.forEach(personObj => {
+        const personName = personObj.name;
         let totalWeight = 0;
-        const personData = filteredScores[person] || {};
+        const personData = filteredScores[personName] || {};
         categories.forEach(category => {
             const protocols = personData[category.name] || [];
             totalWeight += protocols.length * category.weight;
         });
-        personWeights[person] = totalWeight;
+        personWeights[personName] = totalWeight;
     });
     return personWeights;
 }
 
 function populateSelectors() {
-    const personOptions = '<option value="">-- Selecione Pessoa --</option>' + people.map(item => `<option value="${item}">${item}</option>`).join('');
+    const personOptions = '<option value="">-- Selecione Pessoa --</option>' + people.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
     ['person-selector', 'register-person-selector', 'register-fcr-person-selector', 'remove-person-selector', 'fcr-vs-escalation-selector'].forEach(id => {
         document.getElementById(id).innerHTML = personOptions;
     });
@@ -372,7 +423,7 @@ function updateTotals(filteredScores, filteredFcrScores) {
     let maxScore = -1;
     let leadingCategories = [];
     categories.forEach(category => {
-        let categoryTotal = people.reduce((sum, person) => sum + (filteredScores[person]?.[category.name]?.length || 0), 0);
+        let categoryTotal = people.reduce((sum, personObj) => sum + (filteredScores[personObj.name]?.[category.name]?.length || 0), 0);
         const totalSpan = document.getElementById(`total-${category.name}`);
         if (totalSpan) totalSpan.textContent = categoryTotal;
 
@@ -385,7 +436,14 @@ function updateTotals(filteredScores, filteredFcrScores) {
     });
     document.getElementById('leading-category').textContent = maxScore > 0 ? leadingCategories.join(', ') : 'Nenhum';
     let totalEscalonamentos = Object.values(filteredScores).reduce((sum, personData) => sum + Object.values(personData).reduce((s, catProtocols) => s + catProtocols.length, 0), 0);
-    let totalFCR = Object.values(filteredFcrScores).reduce((sum, personData) => sum + Object.values(personData).reduce((s, catProtocols) => s + catProtocols.length, 0), 0);
+    let totalFCR = 0;
+    Object.values(filteredFcrScores).forEach(personData => {
+        Object.values(personData).forEach(categoryProtocols => {
+            if (Array.isArray(categoryProtocols)) {
+                totalFCR += categoryProtocols.filter(p => p.status === 'aprovado').length;
+            }
+        });
+    });
     document.getElementById('total-protocols-value').textContent = totalEscalonamentos + totalFCR;
 }
 
@@ -441,9 +499,10 @@ function renderAgentEvolutionChart(scores) {
         const date = new Date(twelveMonthsAgo.getFullYear(), twelveMonthsAgo.getMonth() + i, 1);
         return date.toLocaleString('default', { month: 'short', year: '2-digit' });
     });
-    const datasets = people.map((person, index) => {
+    const datasets = people.map((personObj, index) => {
+        const personName = personObj.name;
         const data = new Array(12).fill(0);
-        const personScores = scores[person] || {};
+        const personScores = scores[personName] || {};
         for (const category in personScores) {
             if (Array.isArray(personScores[category])) {
                 personScores[category].forEach(entry => {
@@ -459,7 +518,7 @@ function renderAgentEvolutionChart(scores) {
             }
         }
         const colors = ['#818CF8', '#4ADE80', '#FBBF24', '#F87171', '#A78BFA', '#60A5FA'];
-        return { label: person, data, borderColor: colors[index % colors.length], tension: 0.1 };
+        return { label: personName, data, borderColor: colors[index % colors.length], tension: 0.1 };
     });
     if (agentEvolutionChart) agentEvolutionChart.destroy();
     agentEvolutionChart = new Chart(ctx, { type: 'line', data: { labels, datasets } });
@@ -479,8 +538,8 @@ function renderCategoryEvolutionChart(scores) {
         return date.toLocaleString('default', { month: 'short', year: '2-digit' });
     });
     const data = new Array(12).fill(0);
-    people.forEach(person => {
-        const categoryScores = scores[person]?.[selectedCategory];
+    people.forEach(personObj => {
+        const categoryScores = scores[personObj.name]?.[selectedCategory];
         if (Array.isArray(categoryScores)) {
             categoryScores.forEach(entry => {
                 if (entry && entry.date) {
@@ -505,9 +564,16 @@ function renderFcrVsEscalonadoChart(filteredEscalonamentos, filteredFCR) {
     if (fcrVsEscalonadoChart) fcrVsEscalonadoChart.destroy();
     if (!selectedPerson) return;
     const escalonamentosCount = Object.values(filteredEscalonamentos[selectedPerson] || {}).reduce((sum, cat) => sum + cat.length, 0);
-    const fcrCount = Object.values(filteredFCR[selectedPerson] || {}).reduce((sum, cat) => sum + cat.length, 0);
+    let fcrCount = 0;
+    const personFcrData = filteredFCR[selectedPerson] || {};
+    Object.values(personFcrData).forEach(categoryProtocols => {
+        if(Array.isArray(categoryProtocols)) {
+            fcrCount += categoryProtocols.filter(p => p.status === 'aprovado').length;
+        }
+    });
+
     const data = {
-        labels: ['Escalonados', 'FCR'],
+        labels: ['Escalonados', 'FCR (Aprovados)'],
         datasets: [{
             label: `Protocolos de ${selectedPerson}`,
             data: [escalonamentosCount, fcrCount],
@@ -556,6 +622,8 @@ function renderFcrEscalonadoTrendChart(scores, fcrScores) {
             Object.values(personData).forEach(categoryData => {
                 if (Array.isArray(categoryData)) {
                     categoryData.forEach(entry => {
+                        if (type === 'fcr' && entry.status !== 'aprovado') return;
+
                         if (entry && entry.date) {
                             const [day, month, year] = entry.date.split('/');
                             const entryDate = new Date(year, month - 1, day);
@@ -577,7 +645,7 @@ function renderFcrEscalonadoTrendChart(scores, fcrScores) {
         labels,
         datasets: [
             { label: 'Escalonados', data: escalonadosData, borderColor: '#F87171', tension: 0.1, fill: false },
-            { label: 'FCR', data: fcrData, borderColor: '#4ADE80', tension: 0.1, fill: false }
+            { label: 'FCR (Aprovados)', data: fcrData, borderColor: '#4ADE80', tension: 0.1, fill: false }
         ]
     };
     fcrEscalonadoTrendChart = new Chart(ctx, { type: 'line', data, options: { responsive: true } });
@@ -601,11 +669,11 @@ function openProtocolsModal(categoryName) {
     const filterSelect = document.getElementById('protocol-analyst-filter');
     const allProtocols = [];
     const analystNames = new Set(['Todos']);
-    people.forEach(person => {
-        const protocols = localScores[person]?.[categoryName] || [];
+    people.forEach(personObj => {
+        const protocols = localScores[personObj.name]?.[categoryName] || [];
         protocols.forEach(p => {
             if (p && p.analystName) {
-                allProtocols.push({ ...p, person });
+                allProtocols.push({ ...p, person: personObj.name });
                 analystNames.add(p.analystName);
             }
         });
@@ -632,6 +700,201 @@ function openProtocolsModal(categoryName) {
     filterSelect.onchange = renderList;
     renderList();
     document.getElementById('protocols-modal').classList.remove('hidden');
+}
+
+// --- ETAPA 2: FUNÇÕES DO PAINEL DE ADMIN ---
+function renderFcrApprovalPanel() {
+    const approvalList = document.getElementById('fcr-approval-list');
+    approvalList.innerHTML = '';
+    const pendingFcrs = [];
+
+    for (const personName in localFcrScores) {
+        for (const categoryName in localFcrScores[personName]) {
+            const protocols = localFcrScores[personName][categoryName];
+            if (Array.isArray(protocols)) {
+                protocols.forEach((protocol, index) => {
+                    if (protocol.status === 'pendente') {
+                        pendingFcrs.push({ personName, categoryName, protocol, index });
+                    }
+                });
+            }
+        }
+    }
+
+    if (pendingFcrs.length === 0) {
+        approvalList.innerHTML = '<p class="text-center text-slate-400 p-4">Nenhum FCR pendente.</p>';
+        return;
+    }
+
+    pendingFcrs.forEach(fcr => {
+        const item = document.createElement('div');
+        item.className = 'flex items-center justify-between p-3 rounded-md bg-slate-700/50';
+        item.innerHTML = `
+            <div>
+                <p class="font-bold text-white">${fcr.protocol.protocol} - ${fcr.personName}</p>
+                <p class="text-sm text-slate-400">${fcr.categoryName} por ${fcr.protocol.analystName} em ${fcr.protocol.date}</p>
+            </div>
+            <div class="flex gap-2">
+                <button class="approve-fcr-btn bg-green-600 hover:bg-green-700 text-white font-bold py-1 px-3 rounded-lg text-sm">Aprovar</button>
+                <button class="decline-fcr-btn bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg text-sm">Declinar</button>
+            </div>
+        `;
+        item.querySelector('.approve-fcr-btn').addEventListener('click', () => updateFcrStatus(fcr, 'aprovado'));
+        item.querySelector('.decline-fcr-btn').addEventListener('click', () => updateFcrStatus(fcr, 'declinado'));
+        approvalList.appendChild(item);
+    });
+}
+
+async function updateFcrStatus(fcr, newStatus) {
+    const docRef = doc(db, `/artifacts/${appId}/public/data/fcr_scores/${fcr.personName}`);
+    try {
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            const protocols = data[fcr.categoryName];
+            const protocolIndex = protocols.findIndex(p => p.protocol === fcr.protocol.protocol && p.date === fcr.protocol.date);
+
+            if (protocolIndex !== -1) {
+                protocols[protocolIndex].status = newStatus;
+                await updateDoc(docRef, { [fcr.categoryName]: protocols });
+                showStatusMessage(`FCR ${fcr.protocol.protocol} foi ${newStatus}!`, 'success');
+            }
+        }
+    } catch (error) {
+        showStatusMessage(`Erro ao atualizar FCR: ${error.message}`, 'error');
+    }
+}
+
+function renderUserAssociationPanel() {
+    const userSelector = document.getElementById('associate-user-selector');
+    const personSelector = document.getElementById('associate-person-selector');
+
+    const n1Users = allUsers.filter(u => u.role === 'n1');
+    userSelector.innerHTML = '<option value="">-- Selecione um Usuário N1 --</option>' + 
+        n1Users.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+
+    const unassociatedPeople = people.filter(p => !p.associatedUserId);
+    personSelector.innerHTML = '<option value="">-- Selecione uma Pessoa --</option>' +
+        unassociatedPeople.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+}
+
+async function associateUserToPerson() {
+    const userId = document.getElementById('associate-user-selector').value;
+    const personName = document.getElementById('associate-person-selector').value;
+
+    if (!userId || !personName) {
+        showStatusMessage('Selecione um usuário e uma pessoa.', 'error');
+        return;
+    }
+
+    const configRef = doc(db, `/artifacts/${appId}/public/data/config/settings`);
+    const updatedPeople = people.map(p => {
+        if (p.name === personName) {
+            return { ...p, associatedUserId: userId };
+        }
+        return p;
+    });
+
+    try {
+        await updateDoc(configRef, { people: updatedPeople });
+        showStatusMessage('Usuário associado com sucesso!', 'success');
+        await loadConfigData(); 
+    } catch (error) {
+        showStatusMessage(`Erro ao associar: ${error.message}`, 'error');
+    }
+}
+
+async function saveReport() {
+    const content = document.getElementById('report-content').value;
+    if (!content.trim()) {
+        showStatusMessage('O conteúdo do report não pode estar vazio.', 'error');
+        return;
+    }
+
+    const reportsCollection = collection(db, `/artifacts/${appId}/public/data/reports`);
+    const today = new Date();
+    const date = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
+
+    try {
+        await addDoc(reportsCollection, {
+            content,
+            authorName: currentAnalystName,
+            authorId: currentUserId,
+            date,
+        });
+        showStatusMessage('Report salvo com sucesso!', 'success');
+        document.getElementById('report-content').value = '';
+    } catch (error) {
+        showStatusMessage(`Erro ao salvar report: ${error.message}`, 'error');
+    }
+}
+
+// --- ETAPA 3: NOVAS FUNÇÕES DE RENDERIZAÇÃO DE DASHBOARDS ---
+
+// Renderiza o dashboard pessoal do usuário N1
+function renderMyFcrDashboard() {
+    const container = document.getElementById('n1-fcr-summary');
+    if (!container) return;
+
+    // Encontra o nome da "pessoa" associada ao usuário N1 logado
+    const associatedPerson = people.find(p => p.associatedUserId === currentUserId);
+    if (!associatedPerson) {
+        container.innerHTML = '<p class="text-center text-slate-400 p-4">Seu usuário não está associado a uma pessoa avaliada. Fale com o administrador.</p>';
+        return;
+    }
+    const personName = associatedPerson.name;
+
+    // Coleta e agrupa os FCRs aprovados por categoria
+    const approvedFcrsByCategory = {};
+    const personFcrData = localFcrScores[personName] || {};
+    for (const categoryName in personFcrData) {
+        const protocols = personFcrData[categoryName];
+        if (Array.isArray(protocols)) {
+            const approved = protocols.filter(p => p.status === 'aprovado');
+            if (approved.length > 0) {
+                approvedFcrsByCategory[categoryName] = approved;
+            }
+        }
+    }
+
+    if (Object.keys(approvedFcrsByCategory).length === 0) {
+        container.innerHTML = '<p class="text-center text-slate-400 p-4">Você ainda não possui FCRs aprovados.</p>';
+        return;
+    }
+
+    // Gera o HTML para exibir o resumo
+    container.innerHTML = Object.entries(approvedFcrsByCategory).map(([categoryName, protocols]) => {
+        const protocolList = protocols.map(p => `<li class="text-slate-300">${p.protocol} - <span class="text-slate-400 text-sm">Registrado por ${p.analystName} em ${p.date}</span></li>`).join('');
+        return `
+            <div class="p-4 rounded-lg bg-slate-800 border border-slate-700">
+                <h3 class="font-bold text-lg text-indigo-400">${categoryName} <span class="text-base font-medium text-white">(${protocols.length})</span></h3>
+                <ul class="list-disc list-inside mt-2 space-y-1">${protocolList}</ul>
+            </div>
+        `;
+    }).join('');
+}
+
+// Renderiza o dashboard de reports
+function renderReportsDashboard() {
+    const container = document.getElementById('reports-list');
+    if (!container) return;
+
+    if (localReports.length === 0) {
+        container.innerHTML = '<p class="text-center text-slate-400 p-4">Nenhum report registrado.</p>';
+        return;
+    }
+
+    // Gera o HTML para a lista de reports
+    container.innerHTML = localReports.map(report => {
+        // Converte quebras de linha em tags <br> para exibição correta
+        const contentHtml = report.content.replace(/\n/g, '<br>');
+        return `
+            <div class="p-4 rounded-lg bg-slate-800 border border-slate-700">
+                <p class="text-slate-300">${contentHtml}</p>
+                <p class="text-right text-xs text-slate-400 mt-3">-- Registrado por ${report.authorName} em ${report.date}</p>
+            </div>
+        `;
+    }).join('');
 }
 
 // --- EVENT LISTENERS ---
@@ -707,6 +970,8 @@ function setupEventListeners() {
             const userCredential = await createUserWithEmailAndPassword(tempAuth, email, password);
             await setDoc(doc(db, "users", userCredential.user.uid), { role, name });
             showStatusMessage(`Usuário ${name} criado!`, 'success');
+            await loadAllUsers(); 
+            renderUserAssociationPanel(); 
         } catch (error) {
             showStatusMessage(`Erro: ${error.message}`, 'error');
         } finally {
@@ -729,14 +994,16 @@ function setupEventListeners() {
     document.getElementById('add-person-button').addEventListener('click', () => {
         const newPersonInput = document.getElementById('new-person');
         if (newPersonInput.value) {
-            updateConfigList('people', newPersonInput.value, 'add');
+            const newPerson = { name: newPersonInput.value, associatedUserId: null };
+            updateConfigList('people', newPerson, 'add');
             newPersonInput.value = '';
         }
     });
 
     document.getElementById('remove-person-button').addEventListener('click', async () => {
-        const personToRemove = document.getElementById('remove-person-selector').value;
-        if (personToRemove && await showConfirmationModal('Remover Pessoa', `Deseja remover ${personToRemove}?`)) {
+        const personNameToRemove = document.getElementById('remove-person-selector').value;
+        const personToRemove = people.find(p => p.name === personNameToRemove);
+        if (personToRemove && await showConfirmationModal('Remover Pessoa', `Deseja remover ${personNameToRemove}?`)) {
             updateConfigList('people', personToRemove, 'remove');
         }
     });
@@ -761,8 +1028,10 @@ function setupEventListeners() {
 
     document.getElementById('add-fcr-category-button').addEventListener('click', () => {
         const newFcrCategoryInput = document.getElementById('new-fcr-category');
+        const newFcrCategoryWeight = document.getElementById('new-fcr-category-weight').value;
         if (newFcrCategoryInput.value) {
-            updateConfigList('fcrCategories', { name: newFcrCategoryInput.value, weight: 1 }, 'add');
+            const newCategory = { name: newFcrCategoryInput.value, weight: parseInt(newFcrCategoryWeight, 10) };
+            updateConfigList('fcrCategories', newCategory, 'add');
             newFcrCategoryInput.value = '';
         }
     });
@@ -797,6 +1066,10 @@ function setupEventListeners() {
         document.getElementById('new-category-weight-label').textContent = e.target.value;
     });
 
+    document.getElementById('new-fcr-category-weight').addEventListener('input', (e) => {
+        document.getElementById('new-fcr-category-weight-label').textContent = e.target.value;
+    });
+
     document.getElementById('reset-button').addEventListener('click', async () => {
         if (await showConfirmationModal('Resetar Pontos', "Resetar TODOS os pontos? A ação não pode ser desfeita.")) {
             showStatusMessage('Resetando dados...', 'info');
@@ -810,6 +1083,9 @@ function setupEventListeners() {
             showStatusMessage('Todos os pontos foram resetados!', 'success');
         }
     });
+
+    document.getElementById('associate-button').addEventListener('click', associateUserToPerson);
+    document.getElementById('save-report-button').addEventListener('click', saveReport);
 }
 
 // --- INICIAR APLICAÇÃO ---

@@ -138,6 +138,22 @@
                     </div>
                 </div>
                 
+                <!-- NOVO: Seção do Dashboard N1 -->
+                <section id="n1-dashboard-page" class="page-section hidden">
+                    <h2 class="text-2xl font-bold mb-4 text-white">Meus FCRs Aprovados</h2>
+                    <div id="n1-fcr-summary" class="space-y-4">
+                        <!-- Conteúdo gerado por JS -->
+                    </div>
+                </section>
+
+                <!-- NOVO: Seção de Reports -->
+                <section id="reports-page" class="page-section hidden">
+                    <h2 class="text-2xl font-bold mb-4 text-white">Reports Registrados</h2>
+                    <div id="reports-list" class="space-y-4">
+                        <!-- Conteúdo gerado por JS -->
+                    </div>
+                </section>
+
                 <section id="admin-panel" class="page-section hidden">
                     <div class="space-y-4">
                         <!-- Acordeão Item 1: Gerenciar Usuários -->
@@ -190,9 +206,55 @@
                             <div class="accordion-content">
                                 <div class="space-y-4">
                                     <input type="text" id="new-fcr-category" placeholder="Nome da nova categoria FCR" class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white">
+                                    <div class="flex items-center space-x-3"><label for="new-fcr-category-weight" class="text-sm font-medium">Peso:</label><input type="range" id="new-fcr-category-weight" min="0" max="10" value="1" class="w-full"><span id="new-fcr-category-weight-label" class="font-bold text-indigo-400 w-6 text-center">1</span></div>
                                     <button id="add-fcr-category-button" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Adicionar Categoria FCR</button>
                                     <div class="flex gap-2 mt-2"><select id="remove-fcr-category-selector" class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white"></select><button id="remove-fcr-category-button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Remover</button></div>
                                     <button id="clear-fcr-categories-button" class="w-full bg-red-800 hover:bg-red-900 text-white font-bold py-2 px-4 rounded-lg mt-2">Limpar Todas as Categorias FCR</button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Acordeão Item 4: Aprovar FCRs -->
+                        <div class="accordion-item">
+                            <button class="accordion-header">
+                                <span><i class="fas fa-tasks mr-2"></i> Aprovar FCRs Pendentes</span>
+                                <i class="fas fa-chevron-down transition-transform"></i>
+                            </button>
+                            <div class="accordion-content">
+                                <div id="fcr-approval-list" class="space-y-3 max-h-96 overflow-y-auto">
+                                    <!-- Conteúdo gerado por JS -->
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Acordeão Item 5: Associar Usuários -->
+                        <div class="accordion-item">
+                            <button class="accordion-header">
+                                <span><i class="fas fa-link mr-2"></i> Associar Usuário N1 a Pessoa</span>
+                                <i class="fas fa-chevron-down transition-transform"></i>
+                            </button>
+                            <div class="accordion-content">
+                                <div class="space-y-4">
+                                    <div>
+                                        <label for="associate-user-selector" class="block text-sm font-medium text-slate-300">Usuário N1</label>
+                                        <select id="associate-user-selector" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3"></select>
+                                    </div>
+                                    <div>
+                                        <label for="associate-person-selector" class="block text-sm font-medium text-slate-300">Pessoa Não Associada</label>
+                                        <select id="associate-person-selector" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3"></select>
+                                    </div>
+                                    <button id="associate-button" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">Associar</button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Acordeão Item 6: Registrar Report -->
+                        <div class="accordion-item">
+                            <button class="accordion-header">
+                                <span><i class="fas fa-file-alt mr-2"></i> Registrar Report</span>
+                                <i class="fas fa-chevron-down transition-transform"></i>
+                            </button>
+                            <div class="accordion-content">
+                                <div class="space-y-4">
+                                    <textarea id="report-content" rows="5" placeholder="Digite o conteúdo do report..." class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white"></textarea>
+                                    <button id="save-report-button" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg">Salvar Report</button>
                                 </div>
                             </div>
                         </div>
