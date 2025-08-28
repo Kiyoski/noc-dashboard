@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark"> <!-- Definindo o tema escuro como padrão -->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOC Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-slate-900 text-slate-300">
+
+    <!-- Tela de Login -->
+    <div id="login-screen" class="flex items-center justify-center min-h-screen p-4">
+        <div class="w-full max-w-md bg-slate-800 rounded-lg shadow-lg p-8 border border-slate-700">
+            <h2 class="text-2xl font-bold text-center text-white mb-6">Login</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="email" class="block text-sm font-medium text-slate-300">Email</label>
+                    <input type="email" id="email" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label for="password" class="block text-sm font-medium text-slate-300">Senha</label>
+                    <input type="password" id="password" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <button id="login-button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform duration-200 hover:scale-105">Entrar</button>
+            </div>
+            <p id="login-error" class="text-red-400 text-sm mt-4 text-center h-5"></p>
+        </div>
+    </div>
+
+    <!-- Conteúdo Principal da Aplicação -->
+    <div id="app-screen" class="hidden">
+        <div class="flex min-h-screen">
+            <!-- Sidebar (Menu Lateral) -->
+            <aside id="sidebar" class="w-64 bg-slate-800 text-slate-200 flex flex-col p-4 shadow-lg border-r border-slate-700">
+                <!-- Conteúdo dinâmico -->
+            </aside>
+
+            <!-- Área de Conteúdo Principal -->
+            <main id="main-content-area" class="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+                <header class="mb-6">
+                    <div class="flex justify-between items-center">
+                        <h1 id="page-title" class="text-3xl sm:text-4xl font-bold text-white">Início</h1>
+                        <div class="flex items-center">
+                            <span class="text-lg text-slate-400 mr-4">Bem-vindo, <span id="user-name-display" class="font-semibold text-white"></span>!</span>
+                            <button id="logout-button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow-md">Sair</button>
+                        </div>
+                    </div>
+                    <div id="status-message" class="mt-4 p-3 rounded-lg text-center font-medium h-12"></div>
+                </header>
+
+                <!-- PÁGINAS DA APLICAÇÃO -->
+                <section id="home-screen" class="page-section">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-center">
+                        <!-- Conteúdo dinâmico -->
+                    </div>
+                </section>
+
+                <section id="register-page" class="page-section hidden">
+                    <div id="register-doubt-section" class="mb-8 p-6 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
+                        <h2 class="text-2xl font-bold text-center mb-4 text-white">Registrar Escalonamento</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            <div>
+                                <label for="register-person-selector" class="block text-sm font-medium text-slate-300">Pessoa</label>
+                                <select id="register-person-selector" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3"></select>
+                            </div>
+                            <div>
+                                <label for="register-category-selector" class="block text-sm font-medium text-slate-300">Categoria</label>
+                                <select id="register-category-selector" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3"></select>
+                            </div>
+                            <button id="add-doubt-button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md">Adicionar Escalonamento</button>
+                        </div>
+                    </div>
+                    <div id="register-fcr-section" class="mb-8 p-6 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
+                        <h2 class="text-2xl font-bold text-center mb-4 text-white">Registrar FCR</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            <div>
+                                <label for="register-fcr-person-selector" class="block text-sm font-medium text-slate-300">Pessoa</label>
+                                <select id="register-fcr-person-selector" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3"></select>
+                            </div>
+                            <div>
+                                <label for="register-fcr-category-selector" class="block text-sm font-medium text-slate-300">Categoria</label>
+                                <select id="register-fcr-category-selector" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3"></select>
+                            </div>
+                            <button id="add-fcr-button" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md">Adicionar FCR</button>
+                        </div>
+                    </div>
+                </section>
+
+                <div id="viewer-content" class="page-section hidden">
+                    <div class="mb-8 flex justify-center space-x-4">
+                        <button data-subpage="summary-page" class="subpage-btn px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg shadow-md">Resumo</button>
+                        <button data-subpage="charts-page" class="subpage-btn px-4 py-2 bg-slate-600 text-slate-200 font-bold rounded-lg shadow-md">Gráficos</button>
+                        <button data-subpage="ranking-page" class="subpage-btn px-4 py-2 bg-slate-600 text-slate-200 font-bold rounded-lg shadow-md">Ranking</button>
+                    </div>
+                    <div id="summary-page" class="subpage-section">
+                        <section class="mb-8 p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
+                            <label for="time-filter" class="block text-sm font-medium text-slate-300">Filtrar Período</label>
+                            <select id="time-filter" class="mt-1 block w-full md:w-1/3 bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3">
+                                <option value="always">Sempre</option>
+                                <option value="today">Hoje</option>
+                                <option value="3days">Últimos 3 dias</option>
+                                <option value="7days">Última semana</option>
+                                <option value="14days">Últimas 2 semanas</option>
+                                <option value="1month">Último mês</option>
+                                <option value="3months">Últimos 3 meses</option>
+                                <option value="1year">Último ano</option>
+                                <option value="2years">Últimos 2 anos</option>
+                            </select>
+                        </section>
+                        <section id="summary-section" class="mb-8 p-4 bg-slate-900/50 rounded-lg">
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div class="p-4 bg-slate-800 rounded-lg shadow-lg text-center border border-slate-700"><h3 class="text-lg font-semibold text-slate-400"><i class="fas fa-users text-blue-400 mr-2"></i>Maior Dúvida em Comum</h3><p id="leading-category" class="text-2xl font-bold text-emerald-400 mt-2 capitalize">Nenhum</p></div>
+                                <div class="p-4 bg-slate-800 rounded-lg shadow-lg text-center border border-slate-700"><h3 class="text-lg font-semibold text-slate-400"><i class="fas fa-list-ol text-red-400 mr-2"></i>Total de Registros</h3><p id="total-protocols-value" class="text-2xl font-bold text-indigo-400 mt-2">0</p></div>
+                                <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h3 class="text-lg font-semibold text-slate-400 text-center"><i class="fas fa-user text-purple-400 mr-2"></i>Dashboard Individual</h3><select id="person-selector" class="mt-2 block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3"></select><div id="individual-dashboard" class="mt-4 space-y-2"></div></div>
+                            </div>
+                        </section>
+                        <section id="totals-summary-section" class="mb-8"><h2 class="text-2xl font-bold text-center mb-4 text-white">Resumo por Categoria</h2><div id="totals-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 text-center"></div></section>
+                    </div>
+                    <div id="charts-page" class="subpage-section hidden">
+                        <section class="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-4 text-white">Evolução por Agente (12 Meses)</h2><canvas id="agent-evolution-chart"></canvas></div>
+                            <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-2 text-white">Evolução por Categoria (12 Meses)</h2><select id="category-chart-selector" class="block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3 mb-4"></select><canvas id="category-evolution-chart"></canvas></div>
+                            <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-2 text-white">Porcentagem FCR vs. Escalonados</h2><select id="fcr-vs-escalation-selector" class="block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3 mb-4"></select><canvas id="fcr-vs-escalonado-chart"></canvas></div>
+                            <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-4 text-white">Tendência FCR vs. Escalonados (12 Meses)</h2><canvas id="fcr-escalonado-trend-chart"></canvas></div>
+                        </section>
+                    </div>
+                    <div id="ranking-page" class="subpage-section hidden">
+                        <section id="weight-ranking-section" class="mb-8"><h2 class="text-2xl font-bold text-center mb-4 text-white">Ranking por Peso</h2><div id="weight-ranking-list" class="space-y-3 bg-slate-800 p-4 rounded-lg shadow-lg border border-slate-700"></div></section>
+                    </div>
+                </div>
+                
+                <section id="admin-panel" class="page-section hidden">
+                    <div class="space-y-4">
+                        <!-- Acordeão Item 1: Gerenciar Usuários -->
+                        <div class="accordion-item">
+                            <button class="accordion-header">
+                                <span><i class="fas fa-users mr-2"></i> Gerenciar Usuários</span>
+                                <i class="fas fa-chevron-down transition-transform"></i>
+                            </button>
+                            <div class="accordion-content">
+                                <div class="space-y-4">
+                                    <input type="email" id="new-user-email" placeholder="Email do novo usuário" class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white">
+                                    <input type="text" id="new-user-name" placeholder="Nome do Analista" class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white">
+                                    <input type="password" id="new-user-password" placeholder="Senha" class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white">
+                                    <select id="new-user-role" class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white">
+                                        <option value="input">Input</option>
+                                        <option value="viewer">Viewer</option>
+                                        <option value="n1">N1</option>
+                                        <option value="admin">Administrador</option>
+                                    </select>
+                                    <button id="add-user-button" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Adicionar Usuário</button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Acordeão Item 2: Gerenciar Listas de Escalonamento -->
+                        <div class="accordion-item">
+                            <button class="accordion-header">
+                                <span><i class="fas fa-sitemap mr-2"></i> Gerenciar Listas de Escalonamento</span>
+                                <i class="fas fa-chevron-down transition-transform"></i>
+                            </button>
+                            <div class="accordion-content">
+                                <div class="space-y-4">
+                                    <input type="text" id="new-person" placeholder="Adicionar nova pessoa" class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white">
+                                    <button id="add-person-button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Adicionar Pessoa</button>
+                                    <div class="flex gap-2 mt-2"><select id="remove-person-selector" class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white"></select><button id="remove-person-button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Remover</button></div>
+                                    <hr class="my-4 border-slate-600">
+                                    <input type="text" id="new-category" placeholder="Nome da nova categoria" class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white">
+                                    <div class="flex items-center space-x-3"><label for="new-category-weight" class="text-sm font-medium">Peso:</label><input type="range" id="new-category-weight" min="0" max="10" value="5" class="w-full"><span id="new-category-weight-label" class="font-bold text-indigo-400 w-6 text-center">5</span></div>
+                                    <button id="add-category-button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Adicionar Categoria</button>
+                                    <div class="flex gap-2 mt-2"><select id="remove-category-selector" class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white"></select><button id="remove-category-button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Remover</button></div>
+                                    <button id="clear-categories-button" class="w-full bg-red-800 hover:bg-red-900 text-white font-bold py-2 px-4 rounded-lg mt-2">Limpar Todas as Categorias</button>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Acordeão Item 3: Gerenciar Categorias de FCR -->
+                        <div class="accordion-item">
+                            <button class="accordion-header">
+                                <span><i class="fas fa-check-circle mr-2"></i> Gerenciar Categorias de FCR</span>
+                                <i class="fas fa-chevron-down transition-transform"></i>
+                            </button>
+                            <div class="accordion-content">
+                                <div class="space-y-4">
+                                    <input type="text" id="new-fcr-category" placeholder="Nome da nova categoria FCR" class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white">
+                                    <button id="add-fcr-category-button" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg">Adicionar Categoria FCR</button>
+                                    <div class="flex gap-2 mt-2"><select id="remove-fcr-category-selector" class="block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white"></select><button id="remove-fcr-category-button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">Remover</button></div>
+                                    <button id="clear-fcr-categories-button" class="w-full bg-red-800 hover:bg-red-900 text-white font-bold py-2 px-4 rounded-lg mt-2">Limpar Todas as Categorias FCR</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-center mt-8">
+                        <button id="reset-button" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-4 rounded-lg">Resetar Todos os Pontos</button>
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modais -->
+    <div id="input-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 border border-slate-700">
+            <h3 id="modal-title" class="text-xl font-bold mb-4 text-white">Registrar Dúvida</h3>
+            <p class="mb-4 text-slate-300">Insira o número de referência (mínimo 5 dígitos).</p>
+            <input type="number" id="reference-number" class="mt-1 block w-full rounded-md p-2 bg-slate-700 border-slate-600 text-white" placeholder="Ex: 12345">
+            <p id="modal-error" class="text-red-400 text-sm mt-2 h-5"></p>
+            <div class="mt-6 flex justify-end space-x-4">
+                <button id="modal-cancel-btn" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg text-white">Cancelar</button>
+                <button id="modal-submit-btn" class="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg">Confirmar</button>
+            </div>
+        </div>
+    </div>
+    <div id="protocols-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col border border-slate-700">
+            <div class="flex justify-between items-center mb-4"><h3 id="protocols-modal-title" class="text-xl font-bold text-white">Protocolos</h3><button id="protocols-modal-close-btn" class="text-2xl leading-none text-white">&times;</button></div>
+            <div class="mb-4">
+                <label for="protocol-analyst-filter" class="block text-sm font-medium text-slate-300">Filtrar por Analista</label>
+                <select id="protocol-analyst-filter" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3"></select>
+            </div>
+            <div id="protocols-modal-content" class="overflow-y-auto space-y-4"></div>
+        </div>
+    </div>
+    <!-- NOVO MODAL DE CONFIRMAÇÃO -->
+    <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 border border-slate-700">
+            <h3 id="confirmation-modal-title" class="text-xl font-bold mb-4 text-white">Confirmar Ação</h3>
+            <p id="confirmation-modal-text" class="mb-6 text-slate-300">Você tem certeza?</p>
+            <div class="mt-6 flex justify-end space-x-4">
+                <button id="confirmation-modal-cancel-btn" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg text-white">Cancelar</button>
+                <button id="confirmation-modal-confirm-btn" class="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
