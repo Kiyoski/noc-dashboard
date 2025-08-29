@@ -1,13 +1,14 @@
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
 import { getFirestore, doc, onSnapshot, setDoc, writeBatch, collection, getDocs, arrayUnion, updateDoc, getDoc, arrayRemove, addDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-storage.js";
 
 // --- CONFIGURAÇÃO ---
 const userFirebaseConfig = {
     apiKey: "AIzaSyBbW6v00XhDIpcE7weG_reOBzTgsgXJXDk",
     authDomain: "avaliacaon1.firebaseapp.com",
     projectId: "avaliacaon1",
-    storageBucket: "avaliacaon1.appspot.com",
+    storageBucket: "avaliacaon1.firebasestorage.app",
     messagingSenderId: "18545955185",
     appId: "1:18545955185:web:f617bc54edca4fb65a26d0",
     measurementId: "G-VSNGL56W70"
@@ -39,14 +40,14 @@ const modalTitle = document.getElementById('modal-title');
 const confirmationModal = document.getElementById('confirmation-modal');
 
 // --- VARIÁVEIS GLOBAIS ---
-let app, db, auth;
+let app, db, auth, storage;
 let people = []; 
 let categories = [];
 let fcrCategories = []; 
 let allUsers = []; 
 let localScores = {};
 let localFcrScores = {};
-let localReports = []; // ETAPA 3: Para guardar a lista de reports
+let localReports = [];
 let modalContext = {};
 let agentEvolutionChart, categoryEvolutionChart, fcrVsEscalonadoChart, fcrEscalonadoTrendChart;
 let currentAnalystName = '';
@@ -82,12 +83,10 @@ function setupUIForRole(role) {
 
     const menuItems = {
         home: { title: 'Início', icon: 'fa-home', roles: ['admin', 'viewer', 'input', 'n1'], page: 'home-screen' },
-        // ETAPA 3: Novo item de menu para o Dashboard N1
         n1Dashboard: { title: 'Meus FCRs', icon: 'fa-user-check', roles: ['n1'], page: 'n1-dashboard-page' },
         dashboard: { title: 'Dashboard Geral', icon: 'fa-chart-line', roles: ['admin', 'viewer'], page: 'viewer-content' },
         register: { title: 'Registros', icon: 'fa-plus-circle', roles: ['admin', 'input', 'n1'], page: 'register-page' },
-        // ETAPA 3: Novo item de menu para Reports
-        reports: { title: 'Reports', icon: 'fa-file-alt', roles: ['admin', 'viewer'], page: 'reports-page' },
+        reports: { title: 'Reports', icon: 'fa-file-alt', roles: ['admin', 'viewer', 'input', 'n1'], page: 'reports-page' },
         admin: { title: 'Admin', icon: 'fa-cogs', roles: ['admin'], page: 'admin-panel' }
     };
 
@@ -179,6 +178,7 @@ async function main() {
         app = initializeApp(firebaseConfig);
         db = getFirestore(app);
         auth = getAuth(app);
+        storage = getStorage(app);
         
         onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -191,6 +191,7 @@ async function main() {
                     
                     await loadAllUsers(); 
                     await loadConfigData();
+                    setupReportModal();
                     setupUIForRole(currentUserRole);
                     setupFirestoreListener();
                     
@@ -272,17 +273,14 @@ function setupFirestoreListener() {
         }
     }, (error) => console.error("Erro no listener de FCR:", error));
 
-    // CORREÇÃO: Adicionado um filtro para ignorar documentos sem data
     onSnapshot(query(reportsCollectionRef), (querySnapshot) => {
         localReports = [];
         querySnapshot.forEach((doc) => {
             const data = doc.data();
-            // Apenas adiciona o report se ele tiver um campo de data
             if (data && data.date) {
                 localReports.push({ id: doc.id, ...data });
             }
         });
-        // Ordena os reports por data (mais recentes primeiro)
         localReports.sort((a, b) => {
             const dateA = a.date.split('/').reverse().join('');
             const dateB = b.date.split('/').reverse().join('');
@@ -702,7 +700,7 @@ function openProtocolsModal(categoryName) {
     document.getElementById('protocols-modal').classList.remove('hidden');
 }
 
-// --- ETAPA 2: FUNÇÕES DO PAINEL DE ADMIN ---
+// --- FUNÇÕES DO PAINEL DE ADMIN ---
 function renderFcrApprovalPanel() {
     const approvalList = document.getElementById('fcr-approval-list');
     approvalList.innerHTML = '';
@@ -804,13 +802,55 @@ async function associateUserToPerson() {
     }
 }
 
+function setupReportModal() {
+    const personSelector = document.getElementById('report-person-selector');
+    personSelector.innerHTML = '<option value="">-- Selecione uma Pessoa --</option>' + people.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+
+    const impactSelector = document.getElementById('report-impact-selector');
+    const impacts = [
+        { value: 'nulo', label: 'Nulo', color: 'bg-gray-500' },
+        { value: 'baixo', label: 'Baixo', color: 'bg-green-500' },
+        { value: 'medio', label: 'Médio', color: 'bg-yellow-500' },
+        { value: 'alto', label: 'Alto', color: 'bg-red-500' }
+    ];
+    impactSelector.innerHTML = impacts.map(impact => `
+        <div>
+            <input type="radio" name="impact" id="impact-${impact.value}" value="${impact.value}" class="hidden peer">
+            <label for="impact-${impact.value}" class="px-3 py-1 rounded-full text-sm font-semibold cursor-pointer border-2 border-slate-600 peer-checked:border-transparent peer-checked:text-white ${impact.color}">
+                ${impact.label}
+            </label>
+        </div>
+    `).join('');
+}
+
 async function saveReport() {
-    const content = document.getElementById('report-content').value;
-    if (!content.trim()) {
-        showStatusMessage('O conteúdo do report não pode estar vazio.', 'error');
+    const content = document.getElementById('report-new-content').value;
+    const personName = document.getElementById('report-person-selector').value;
+    const impactInput = document.querySelector('input[name="impact"]:checked');
+
+    if (!content.trim() || !personName || !impactInput) {
+        showStatusMessage('Preencha todos os campos do report.', 'error');
         return;
     }
+    const impact = impactInput.value;
+    
+    const fileInput = document.getElementById('report-image-upload');
+    const file = fileInput.files[0];
+    let imageUrl = "";
 
+    showStatusMessage('Salvando report...', 'info');
+
+    if (file) {
+        try {
+            const storageRef = ref(storage, `reports/${appId}/${Date.now()}_${file.name}`);
+            const snapshot = await uploadBytes(storageRef, file);
+            imageUrl = await getDownloadURL(snapshot.ref);
+        } catch (error) {
+            showStatusMessage(`Erro no upload da imagem: ${error.message}`, 'error');
+            return;
+        }
+    }
+    
     const reportsCollection = collection(db, `/artifacts/${appId}/public/data/reports`);
     const today = new Date();
     const date = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
@@ -818,25 +858,68 @@ async function saveReport() {
     try {
         await addDoc(reportsCollection, {
             content,
+            personName,
+            impact,
             authorName: currentAnalystName,
             authorId: currentUserId,
             date,
+            imageUrl: imageUrl
         });
         showStatusMessage('Report salvo com sucesso!', 'success');
-        document.getElementById('report-content').value = '';
+        document.getElementById('register-report-modal').classList.add('hidden');
+        document.getElementById('report-new-content').value = '';
+        document.getElementById('report-person-selector').value = '';
+        impactInput.checked = false;
+        fileInput.value = '';
     } catch (error) {
         showStatusMessage(`Erro ao salvar report: ${error.message}`, 'error');
     }
 }
 
-// --- ETAPA 3: NOVAS FUNÇÕES DE RENDERIZAÇÃO DE DASHBOARDS ---
+async function updateReport(reportId) {
+    const reportRef = doc(db, `/artifacts/${appId}/public/data/reports`, reportId);
+    
+    const updatedData = {
+        content: document.getElementById('report-new-content').value,
+        personName: document.getElementById('report-person-selector').value,
+        impact: document.querySelector('input[name="impact"]:checked').value,
+    };
 
-// Renderiza o dashboard pessoal do usuário N1
+    try {
+        await updateDoc(reportRef, updatedData);
+        showStatusMessage('Report atualizado com sucesso!', 'success');
+        document.getElementById('register-report-modal').classList.add('hidden');
+        delete document.getElementById('report-modal-submit-btn').dataset.editingId;
+    } catch (error) {
+        showStatusMessage(`Erro ao atualizar: ${error.message}`, 'error');
+    }
+}
+
+
+function openReportEditModal(report) {
+    document.getElementById('report-person-selector').value = report.personName;
+    const impactInput = document.querySelector(`input[name="impact"][value="${report.impact}"]`);
+    if(impactInput) impactInput.checked = true;
+    document.getElementById('report-new-content').value = report.content;
+    
+    document.querySelector('#register-report-modal h3').textContent = 'Editar Report';
+    const submitBtn = document.getElementById('report-modal-submit-btn');
+    submitBtn.textContent = 'Salvar Alterações';
+    
+    submitBtn.dataset.editingId = report.id;
+    
+    // Esconde o upload de imagem na edição por simplicidade
+    document.getElementById('report-image-upload').parentElement.classList.add('hidden');
+
+    document.getElementById('register-report-modal').classList.remove('hidden');
+}
+
+// --- FUNÇÕES DE RENDERIZAÇÃO DE DASHBOARDS ---
+
 function renderMyFcrDashboard() {
     const container = document.getElementById('n1-fcr-summary');
     if (!container) return;
 
-    // Encontra o nome da "pessoa" associada ao usuário N1 logado
     const associatedPerson = people.find(p => p.associatedUserId === currentUserId);
     if (!associatedPerson) {
         container.innerHTML = '<p class="text-center text-slate-400 p-4">Seu usuário não está associado a uma pessoa avaliada. Fale com o administrador.</p>';
@@ -844,7 +927,6 @@ function renderMyFcrDashboard() {
     }
     const personName = associatedPerson.name;
 
-    // Coleta e agrupa os FCRs aprovados por categoria
     const approvedFcrsByCategory = {};
     const personFcrData = localFcrScores[personName] || {};
     for (const categoryName in personFcrData) {
@@ -862,7 +944,6 @@ function renderMyFcrDashboard() {
         return;
     }
 
-    // Gera o HTML para exibir o resumo
     container.innerHTML = Object.entries(approvedFcrsByCategory).map(([categoryName, protocols]) => {
         const protocolList = protocols.map(p => `<li class="text-slate-300">${p.protocol} - <span class="text-slate-400 text-sm">Registrado por ${p.analystName} em ${p.date}</span></li>`).join('');
         return `
@@ -874,7 +955,16 @@ function renderMyFcrDashboard() {
     }).join('');
 }
 
-// Renderiza o dashboard de reports
+function getImpactColor(impact) {
+    switch (impact) {
+        case 'alto': return 'bg-red-500 text-white';
+        case 'medio': return 'bg-yellow-500 text-slate-900';
+        case 'baixo': return 'bg-green-500 text-white';
+        case 'nulo': return 'bg-gray-500 text-white';
+        default: return 'bg-slate-600 text-slate-200';
+    }
+}
+
 function renderReportsDashboard() {
     const container = document.getElementById('reports-list');
     if (!container) return;
@@ -884,14 +974,35 @@ function renderReportsDashboard() {
         return;
     }
 
-    // Gera o HTML para a lista de reports
     container.innerHTML = localReports.map(report => {
-        // Converte quebras de linha em tags <br> para exibição correta
         const contentHtml = report.content.replace(/\n/g, '<br>');
+        
+        const adminButtons = currentUserRole === 'admin' ? `
+            <div class="flex gap-2">
+                <button class="edit-report-btn text-sm text-blue-400 hover:text-blue-300"><i class="fas fa-edit mr-1"></i>Editar</button>
+            </div>
+        ` : '';
+
+        const imageHtml = report.imageUrl ? `
+            <div class="mt-4">
+                <a href="${report.imageUrl}" target="_blank" rel="noopener noreferrer">
+                    <img src="${report.imageUrl}" alt="Imagem do Report" class="max-w-xs rounded-lg border border-slate-600 hover:opacity-80 transition-opacity">
+                </a>
+            </div>
+        ` : '';
+
         return `
-            <div class="p-4 rounded-lg bg-slate-800 border border-slate-700">
-                <p class="text-slate-300">${contentHtml}</p>
-                <p class="text-right text-xs text-slate-400 mt-3">-- Registrado por ${report.authorName} em ${report.date}</p>
+            <div class="p-4 rounded-lg bg-slate-800 border border-slate-700 report-card" data-report='${JSON.stringify(report)}'>
+                <div class="flex justify-between items-start mb-2">
+                    <p class="text-sm text-slate-400">Associado a: <span class="font-semibold text-slate-200">${report.personName || 'N/A'}</span></p>
+                    <span class="text-xs font-bold uppercase px-2 py-1 rounded-full ${getImpactColor(report.impact)}">${report.impact || 'Sem Impacto'}</span>
+                </div>
+                <p class="text-slate-300 mt-2">${contentHtml}</p>
+                ${imageHtml}
+                <div class="flex justify-between items-center mt-3">
+                    <p class="text-xs text-slate-500">Registrado por ${report.authorName} em ${report.date}</p>
+                    ${adminButtons}
+                </div>
             </div>
         `;
     }).join('');
@@ -950,6 +1061,46 @@ function setupEventListeners() {
     document.getElementById('confirmation-modal-confirm-btn').addEventListener('click', () => {
         confirmationModal.classList.add('hidden');
         if (confirmationResolve) confirmationResolve(true);
+    });
+
+    document.getElementById('open-register-report-modal-btn').addEventListener('click', () => {
+        document.querySelector('#register-report-modal h3').textContent = 'Registrar Report de Operação';
+        const submitBtn = document.getElementById('report-modal-submit-btn');
+        submitBtn.textContent = 'Salvar Report';
+        delete submitBtn.dataset.editingId;
+
+        // Limpa o formulário antes de abrir
+        document.getElementById('report-new-content').value = '';
+        document.getElementById('report-person-selector').value = '';
+        const checkedImpact = document.querySelector('input[name="impact"]:checked');
+        if(checkedImpact) checkedImpact.checked = false;
+        document.getElementById('report-image-upload').value = '';
+
+        // Mostra o upload de imagem ao criar novo report
+        document.getElementById('report-image-upload').parentElement.classList.remove('hidden');
+
+        document.getElementById('register-report-modal').classList.remove('hidden');
+    });
+    document.getElementById('report-modal-cancel-btn').addEventListener('click', () => {
+        document.getElementById('register-report-modal').classList.add('hidden');
+    });
+    
+    document.getElementById('report-modal-submit-btn').addEventListener('click', (e) => {
+        const reportId = e.target.dataset.editingId;
+        if (reportId) {
+            updateReport(reportId);
+        } else {
+            saveReport();
+        }
+    });
+
+    document.getElementById('reports-list').addEventListener('click', (e) => {
+        const editButton = e.target.closest('.edit-report-btn');
+        if (editButton) {
+            const reportCard = e.target.closest('.report-card');
+            const reportData = JSON.parse(reportCard.dataset.report);
+            openReportEditModal(reportData);
+        }
     });
 
     // Admin Panel Listeners
@@ -1045,7 +1196,7 @@ function setupEventListeners() {
     });
     
     document.getElementById('clear-categories-button').addEventListener('click', async () => {
-        if (await showConfirmationModal('Limpar Categorias', "Limpar TODAS as categorias de escalonamento? A ação não pode ser desfeita.")) {
+        if (await showConfirmationModal('Limpar Categorias', "Limpar TODAS as categorias de escalonamento? Ação não pode ser desfeita.")) {
             const configRef = doc(db, `/artifacts/${appId}/public/data/config/settings`);
             await updateDoc(configRef, { categories: [] });
             showStatusMessage('Categorias de escalonamento limpas!', 'success');
@@ -1054,7 +1205,7 @@ function setupEventListeners() {
     });
 
     document.getElementById('clear-fcr-categories-button').addEventListener('click', async () => {
-        if (await showConfirmationModal('Limpar Categorias FCR', "Limpar TODAS as categorias FCR? A ação não pode ser desfeita.")) {
+        if (await showConfirmationModal('Limpar Categorias FCR', "Limpar TODAS as categorias FCR? Ação não pode ser desfeita.")) {
             const configRef = doc(db, `/artifacts/${appId}/public/data/config/settings`);
             await updateDoc(configRef, { fcrCategories: [] });
             showStatusMessage('Categorias FCR limpas!', 'success');
@@ -1071,7 +1222,7 @@ function setupEventListeners() {
     });
 
     document.getElementById('reset-button').addEventListener('click', async () => {
-        if (await showConfirmationModal('Resetar Pontos', "Resetar TODOS os pontos? A ação não pode ser desfeita.")) {
+        if (await showConfirmationModal('Resetar Pontos', "Resetar TODOS os pontos? Ação não pode ser desfeita.")) {
             showStatusMessage('Resetando dados...', 'info');
             const batch = writeBatch(db);
             const scoresCollection = collection(db, `/artifacts/${appId}/public/data/scores`);
@@ -1085,9 +1236,9 @@ function setupEventListeners() {
     });
 
     document.getElementById('associate-button').addEventListener('click', associateUserToPerson);
-    document.getElementById('save-report-button').addEventListener('click', saveReport);
 }
 
 // --- INICIAR APLICAÇÃO ---
 setupEventListeners();
 main();
+
