@@ -9,6 +9,23 @@ body {
 .dark .text-slate-300 { color: #CBD5E1; }
 .dark .text-slate-400 { color: #94A3B8; }
 
+/* --- Tela de Carregamento --- */
+.loader {
+    border-top-color: #6366F1; /* indigo-500 */
+    -webkit-animation: spinner 1.5s linear infinite;
+    animation: spinner 1.5s linear infinite;
+}
+
+@-webkit-keyframes spinner {
+    0% { -webkit-transform: rotate(0deg); }
+    100% { -webkit-transform: rotate(360deg); }
+}
+
+@keyframes spinner {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 /* --- Estilos do Menu Lateral (Sidebar) --- */
 .sidebar-item {
     display: flex;
@@ -78,7 +95,7 @@ body {
 }
 
 .accordion-content {
-    padding: 0 1.5rem; /* Remove padding vertical quando fechado */
+    padding: 0 1.5rem;
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.3s ease-out, padding 0.3s ease-out;
@@ -86,7 +103,7 @@ body {
 
 .accordion-content.open {
     padding: 1.5rem;
-    max-height: 1000px; /* Altura suficiente para o conteúdo */
+    max-height: 1000px;
     transition: max-height 0.5s ease-in, padding 0.5s ease-in;
 }
 

@@ -17,6 +17,13 @@
 </head>
 <body class="bg-slate-900 text-slate-300">
 
+    <!-- Tela de Carregamento -->
+    <div id="loading-overlay" class="fixed inset-0 bg-slate-900 z-[100] flex flex-col items-center justify-center">
+        <div class="loader ease-linear rounded-full border-8 border-t-8 border-slate-700 h-32 w-32 mb-4"></div>
+        <h2 class="text-center text-white text-xl font-semibold">Carregando...</h2>
+        <p class="w-1/3 text-center text-slate-400 mt-2">Preparando o dashboard, por favor aguarde.</p>
+    </div>
+
     <!-- Tela de Login -->
     <div id="login-screen" class="flex items-center justify-center min-h-screen p-4">
         <div class="w-full max-w-md bg-slate-800 rounded-lg shadow-lg p-8 border border-slate-700">
@@ -40,7 +47,7 @@
     <div id="app-screen" class="hidden">
         <div class="flex min-h-screen">
             <!-- Sidebar (Menu Lateral) -->
-            <aside id="sidebar" class="w-64 bg-slate-800 text-slate-200 flex flex-col p-4 shadow-lg border-r border-slate-700">
+            <aside id="sidebar" class="w-64 bg-slate-800 text-slate-200 flex-col p-4 shadow-lg border-r border-slate-700 hidden md:flex">
                 <!-- Conteúdo dinâmico -->
             </aside>
 
@@ -101,20 +108,23 @@
                         <button data-subpage="charts-page" class="subpage-btn px-4 py-2 bg-slate-600 text-slate-200 font-bold rounded-lg shadow-md">Gráficos</button>
                         <button data-subpage="ranking-page" class="subpage-btn px-4 py-2 bg-slate-600 text-slate-200 font-bold rounded-lg shadow-md">Ranking</button>
                     </div>
-                    <div id="summary-page" class="subpage-section">
-                        <section class="mb-8 p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
-                            <div class="flex items-end gap-4">
-                                <div>
-                                    <label for="start-date-filter" class="block text-sm font-medium text-slate-300">Data de Início</label>
-                                    <input type="date" id="start-date-filter" class="mt-1 bg-slate-700 border-slate-600 text-white rounded-md p-2">
-                                </div>
-                                <div>
-                                    <label for="end-date-filter" class="block text-sm font-medium text-slate-300">Data Final</label>
-                                    <input type="date" id="end-date-filter" class="mt-1 bg-slate-700 border-slate-600 text-white rounded-md p-2">
-                                </div>
-                                <button id="custom-time-filter-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">Filtrar</button>
+
+                    <section class="mb-8 p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
+                        <div class="flex flex-wrap items-end gap-4">
+                            <div>
+                                <label for="start-date-filter" class="block text-sm font-medium text-slate-300">Data de Início</label>
+                                <input type="date" id="start-date-filter" class="mt-1 bg-slate-700 border-slate-600 text-white rounded-md p-2">
                             </div>
-                        </section>
+                            <div>
+                                <label for="end-date-filter" class="block text-sm font-medium text-slate-300">Data Final</label>
+                                <input type="date" id="end-date-filter" class="mt-1 bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                            </div>
+                            <button id="custom-time-filter-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">Filtrar</button>
+                        </div>
+                        <p id="active-filter-indicator" class="text-xs text-amber-400 mt-3 h-4"></p>
+                    </section>
+                    
+                    <div id="summary-page" class="subpage-section">
                         <section id="summary-section" class="mb-8 p-4 bg-slate-900/50 rounded-lg">
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div class="p-4 bg-slate-800 rounded-lg shadow-lg text-center border border-slate-700"><h3 class="text-lg font-semibold text-slate-400"><i class="fas fa-users text-blue-400 mr-2"></i>Maior Dúvida em Comum</h3><p id="leading-category" class="text-2xl font-bold text-emerald-400 mt-2 capitalize">Nenhum</p></div>
@@ -125,7 +135,18 @@
                         <section id="totals-summary-section" class="mb-8"><h2 class="text-2xl font-bold text-center mb-4 text-white">Resumo por Categoria</h2><div id="totals-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 text-center"></div></section>
                     </div>
                     <div id="charts-page" class="subpage-section hidden">
-                        <section class="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <section class="mb-8 p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
+                            <h3 class="text-lg font-bold text-white mb-4">Filtros dos Gráficos</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-slate-300 mb-2">Filtrar Agentes (Gráfico de Evolução e Tendência)</label>
+                                    <div id="agent-chart-filter-container" class="space-y-2 max-h-40 overflow-y-auto p-2 bg-slate-700 rounded-md">
+                                        <!-- Checkboxes dos agentes serão populados aqui -->
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                             <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-4 text-white">Evolução por Agente (12 Meses)</h2><canvas id="agent-evolution-chart"></canvas></div>
                             <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-2 text-white">Evolução por Categoria (12 Meses)</h2><select id="category-chart-selector" class="block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3 mb-4"></select><canvas id="category-evolution-chart"></canvas></div>
                             <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-2 text-white">Desempenho: FCR vs Escalonados vs Reports</h2><select id="fcr-vs-escalation-selector" class="block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3 mb-4"></select><canvas id="fcr-vs-escalonado-chart"></canvas></div>

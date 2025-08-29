@@ -18,6 +18,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined' && Object.keys(J
 const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.appId;
 
 // --- ELEMENTOS DO DOM ---
+const loadingOverlay = document.getElementById('loading-overlay');
 const loginScreen = document.getElementById('login-screen');
 const appScreen = document.getElementById('app-screen');
 const loginButton = document.getElementById('login-button');
@@ -171,6 +172,18 @@ function showConfirmationModal(title, text) {
     });
 }
 
+function updateActiveFilterDisplay(startDateStr, endDateStr) {
+    const indicator = document.getElementById('active-filter-indicator');
+    if (startDateStr && endDateStr) {
+        const start = new Date(startDateStr + 'T00:00:00');
+        const end = new Date(endDateStr + 'T00:00:00');
+        const options = { year: 'numeric', month: '2-digit', day: '2-digit' };
+        indicator.textContent = `Filtro de data ativo: ${start.toLocaleDateString('pt-BR', options)} até ${end.toLocaleDateString('pt-BR', options)}`;
+    } else {
+        indicator.textContent = '';
+    }
+}
+
 // --- INICIALIZAÇÃO ---
 async function main() {
     try {
@@ -194,31 +207,34 @@ async function main() {
                     setupReportModal();
                     setupUIForRole(currentUserRole);
 
-                    // Define datas padrão e carrega dados iniciais
                     const today = new Date();
                     const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
                     document.getElementById('end-date-filter').valueAsDate = today;
                     document.getElementById('start-date-filter').valueAsDate = firstDayOfMonth;
                     
-                    setupFirestoreListener(); // O listener chamará filterAndRenderAll()
+                    setupFirestoreListener(); 
                     
                     navigateTo('home-screen', 'Início');
                     showSubPage('summary-page');
 
                     loginScreen.classList.add('hidden');
                     appScreen.classList.remove('hidden');
+                    loadingOverlay.classList.add('hidden');
                 } else {
                     loginError.textContent = 'Usuário sem permissão. Contate o admin.';
                     await signOut(auth);
+                    loadingOverlay.classList.add('hidden');
                 }
             } else {
                 loginScreen.classList.remove('hidden');
                 appScreen.classList.add('hidden');
+                loadingOverlay.classList.add('hidden');
             }
         });
     } catch (e) {
         console.error("ERRO FATAL:", e);
         loginError.textContent = `Erro fatal: ${e.message}`;
+        loadingOverlay.classList.add('hidden');
     }
 }
 
@@ -251,6 +267,7 @@ async function loadConfigData() {
         fcrCategories = [];
     }
     populateSelectors();
+    populateAgentChartFilter();
     createTotalsGrid();
     if (currentUserRole === 'admin') {
         renderUserAssociationPanel();
@@ -294,6 +311,7 @@ function setupFirestoreListener() {
             return dateB.localeCompare(dateA);
         });
         renderReportsDashboard();
+        filterAndRenderAll(); 
     }, (error) => console.error("Erro no listener de reports:", error));
 }
 
@@ -335,6 +353,8 @@ function filterAndRenderAll() {
     const startDate = document.getElementById('start-date-filter').value;
     const endDate = document.getElementById('end-date-filter').value;
 
+    updateActiveFilterDisplay(startDate, endDate);
+
     const filteredScores = filterScoresByPeriod(localScores, startDate, endDate);
     const filteredFcrScores = filterScoresByPeriod(localFcrScores, startDate, endDate);
     const filteredReports = filterReportsByPeriod(localReports, startDate, endDate);
@@ -352,11 +372,9 @@ function filterAndRenderAll() {
 function filterScoresByPeriod(scores, startDateStr, endDateStr) {
     if (!startDateStr || !endDateStr) return scores;
 
-    const startDate = new Date(startDateStr);
-    startDate.setUTCHours(0, 0, 0, 0);
-    const endDate = new Date(endDateStr);
-    endDate.setUTCHours(23, 59, 59, 999);
-    
+    const startNum = parseInt(startDateStr.replace(/-/g, ''), 10);
+    const endNum = parseInt(endDateStr.replace(/-/g, ''), 10);
+
     const filtered = {};
     for (const person in scores) {
         filtered[person] = {};
@@ -366,8 +384,8 @@ function filterScoresByPeriod(scores, startDateStr, endDateStr) {
                 filtered[person][category] = categoryData.filter(entry => {
                     if (entry && typeof entry === 'object' && entry.date) {
                         const [day, month, year] = entry.date.split('/');
-                        const entryDate = new Date(Date.UTC(year, month - 1, day));
-                        return entryDate >= startDate && entryDate <= endDate;
+                        const entryNum = parseInt(`${year}${month}${day}`, 10);
+                        return entryNum >= startNum && entryNum <= endNum;
                     }
                     return false;
                 });
@@ -380,16 +398,14 @@ function filterScoresByPeriod(scores, startDateStr, endDateStr) {
 function filterReportsByPeriod(reports, startDateStr, endDateStr) {
     if (!startDateStr || !endDateStr) return reports;
 
-    const startDate = new Date(startDateStr);
-    startDate.setUTCHours(0, 0, 0, 0);
-    const endDate = new Date(endDateStr);
-    endDate.setUTCHours(23, 59, 59, 999);
+    const startNum = parseInt(startDateStr.replace(/-/g, ''), 10);
+    const endNum = parseInt(endDateStr.replace(/-/g, ''), 10);
 
     return reports.filter(report => {
         if (report && report.date) {
             const [day, month, year] = report.date.split('/');
-            const entryDate = new Date(Date.UTC(year, month - 1, day));
-            return entryDate >= startDate && entryDate <= endDate;
+            const entryNum = parseInt(`${year}${month}${day}`, 10);
+            return entryNum >= startNum && entryNum <= endNum;
         }
         return false;
     });
@@ -509,9 +525,37 @@ function renderWeightRanking(weights) {
 }
 
 // --- GRÁFICOS ---
+function populateAgentChartFilter() {
+    const container = document.getElementById('agent-chart-filter-container');
+    container.innerHTML = '';
+    people.forEach(person => {
+        const personName = person.name;
+        const div = document.createElement('div');
+        div.className = 'flex items-center';
+        const checkboxId = `agent-filter-${personName.replace(/\s+/g, '-')}`;
+        div.innerHTML = `
+            <input id="${checkboxId}" type="checkbox" value="${personName}" class="agent-chart-filter-cb h-4 w-4 bg-slate-600 border-slate-500 text-indigo-600 rounded focus:ring-indigo-500">
+            <label for="${checkboxId}" class="ml-2 block text-sm text-slate-300">${personName}</label>
+        `;
+        container.appendChild(div);
+    });
+    
+    document.querySelectorAll('.agent-chart-filter-cb').forEach(cb => {
+        cb.addEventListener('change', () => {
+            renderAgentEvolutionChart(localScores);
+            renderFcrEscalonadoTrendChart(localScores, localFcrScores);
+        });
+    });
+}
+
+
 function renderAgentEvolutionChart(scores) {
     const ctx = document.getElementById('agent-evolution-chart').getContext('2d');
     if (!ctx) return;
+
+    const selectedAgents = Array.from(document.querySelectorAll('.agent-chart-filter-cb:checked')).map(cb => cb.value);
+    const peopleToRender = selectedAgents.length > 0 ? people.filter(p => selectedAgents.includes(p.name)) : people;
+
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
     twelveMonthsAgo.setDate(1);
@@ -519,7 +563,8 @@ function renderAgentEvolutionChart(scores) {
         const date = new Date(twelveMonthsAgo.getFullYear(), twelveMonthsAgo.getMonth() + i, 1);
         return date.toLocaleString('default', { month: 'short', year: '2-digit' });
     });
-    const datasets = people.map((personObj, index) => {
+    
+    const datasets = peopleToRender.map((personObj, index) => {
         const personName = personObj.name;
         const data = new Array(12).fill(0);
         const personScores = scores[personName] || {};
@@ -540,6 +585,7 @@ function renderAgentEvolutionChart(scores) {
         const colors = ['#818CF8', '#4ADE80', '#FBBF24', '#F87171', '#A78BFA', '#60A5FA'];
         return { label: personName, data, borderColor: colors[index % colors.length], tension: 0.1 };
     });
+
     if (agentEvolutionChart) agentEvolutionChart.destroy();
     agentEvolutionChart = new Chart(ctx, { type: 'line', data: { labels, datasets } });
 }
@@ -629,6 +675,10 @@ function renderFcrEscalonadoTrendChart(scores, fcrScores) {
     const ctx = document.getElementById('fcr-escalonado-trend-chart').getContext('2d');
     if (!ctx) return;
     if (fcrEscalonadoTrendChart) fcrEscalonadoTrendChart.destroy();
+
+    const selectedAgents = Array.from(document.querySelectorAll('.agent-chart-filter-cb:checked')).map(cb => cb.value);
+    const peopleToRender = selectedAgents.length > 0 ? people.filter(p => selectedAgents.includes(p.name)) : people;
+
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
     twelveMonthsAgo.setDate(1);
@@ -641,13 +691,14 @@ function renderFcrEscalonadoTrendChart(scores, fcrScores) {
         const date = new Date(twelveMonthsAgo.getFullYear(), twelveMonthsAgo.getMonth() + i, 1);
         trendData[`${date.getFullYear()}-${date.getMonth()}`] = { escalonados: 0, fcr: 0 };
     });
-    const processScores = (scoreData, type) => {
-        Object.values(scoreData).forEach(personData => {
+
+    const processScores = (scoreData, type, peopleList) => {
+        peopleList.forEach(personObj => {
+            const personData = scoreData[personObj.name] || {};
             Object.values(personData).forEach(categoryData => {
                 if (Array.isArray(categoryData)) {
                     categoryData.forEach(entry => {
                         if (type === 'fcr' && entry.status !== 'aprovado') return;
-
                         if (entry && entry.date) {
                             const [day, month, year] = entry.date.split('/');
                             const entryDate = new Date(year, month - 1, day);
@@ -661,8 +712,10 @@ function renderFcrEscalonadoTrendChart(scores, fcrScores) {
             });
         });
     };
-    processScores(scores, 'escalonados');
-    processScores(fcrScores, 'fcr');
+
+    processScores(scores, 'escalonados', peopleToRender);
+    processScores(fcrScores, 'fcr', peopleToRender);
+
     const escalonadosData = Object.values(trendData).map(item => item.escalonados);
     const fcrData = Object.values(trendData).map(item => item.fcr);
     const data = {
