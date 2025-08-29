@@ -1,6 +1,6 @@
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
-import { getFirestore, doc, onSnapshot, setDoc, writeBatch, collection, getDocs, arrayUnion, updateDoc, getDoc, arrayRemove, addDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+import { getFirestore, doc, onSnapshot, setDoc, writeBatch, collection, getDocs, arrayUnion, updateDoc, getDoc, arrayRemove, addDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-storage.js";
 
 // --- CONFIGURAÇÃO ---
@@ -49,12 +49,14 @@ let allUsers = [];
 let localScores = {};
 let localFcrScores = {};
 let localReports = [];
+let localOMOrders = [];
 let modalContext = {};
 let agentEvolutionChart, categoryEvolutionChart, fcrVsEscalonadoChart, fcrEscalonadoTrendChart;
 let currentAnalystName = '';
 let currentUserId = ''; 
 let currentUserRole = '';
 let confirmationResolve = null;
+let slaTimer = null; // Timer para atualização do SLA
 
 // --- CONFIGURAÇÃO GLOBAL DO CHART.JS PARA TEMA ESCURO ---
 Chart.defaults.color = '#CBD5E1'; 
@@ -86,6 +88,7 @@ function setupUIForRole(role) {
         home: { title: 'Início', icon: 'fa-home', roles: ['admin', 'viewer', 'input', 'n1'], page: 'home-screen' },
         n1Dashboard: { title: 'Meus FCRs', icon: 'fa-user-check', roles: ['n1'], page: 'n1-dashboard-page' },
         dashboard: { title: 'Dashboard Geral', icon: 'fa-chart-line', roles: ['admin', 'viewer'], page: 'viewer-content' },
+        om: { title: 'O&M', icon: 'fa-truck', roles: ['admin', 'viewer', 'input', 'n1'], page: 'om-page' },
         register: { title: 'Registros', icon: 'fa-plus-circle', roles: ['admin', 'input', 'n1'], page: 'register-page' },
         reports: { title: 'Reports', icon: 'fa-file-alt', roles: ['admin', 'viewer', 'input', 'n1'], page: 'reports-page' },
         admin: { title: 'Admin', icon: 'fa-cogs', roles: ['admin'], page: 'admin-panel' }
@@ -213,6 +216,7 @@ async function main() {
                     document.getElementById('start-date-filter').valueAsDate = firstDayOfMonth;
                     
                     setupFirestoreListener(); 
+                    startSlaTimer(); // Inicia o timer do SLA
                     
                     navigateTo('home-screen', 'Início');
                     showSubPage('summary-page');
@@ -275,28 +279,26 @@ async function loadConfigData() {
 }
 
 function setupFirestoreListener() {
-    const collectionRef = collection(db, `/artifacts/${appId}/public/data/scores`);
-    const fcrCollectionRef = collection(db, `/artifacts/${appId}/public/data/fcr_scores`);
-    const reportsCollectionRef = collection(db, `/artifacts/${appId}/public/data/reports`);
-
-    onSnapshot(collectionRef, (querySnapshot) => {
+    // Listener para Scores de Escalonamento
+    const scoresCollectionRef = collection(db, `/artifacts/${appId}/public/data/scores`);
+    onSnapshot(scoresCollectionRef, (querySnapshot) => {
         localScores = {};
         querySnapshot.forEach((doc) => { localScores[doc.id] = doc.data(); });
         filterAndRenderAll();
     }, (error) => console.error("Erro no listener de escalonamento:", error));
 
+    // Listener para Scores de FCR
+    const fcrCollectionRef = collection(db, `/artifacts/${appId}/public/data/fcr_scores`);
     onSnapshot(fcrCollectionRef, (querySnapshot) => {
         localFcrScores = {};
         querySnapshot.forEach((doc) => { localFcrScores[doc.id] = doc.data(); });
         filterAndRenderAll();
-        if (currentUserRole === 'admin') {
-            renderFcrApprovalPanel();
-        }
-        if (currentUserRole === 'n1') {
-            renderMyFcrDashboard();
-        }
+        if (currentUserRole === 'admin') renderFcrApprovalPanel();
+        if (currentUserRole === 'n1') renderMyFcrDashboard();
     }, (error) => console.error("Erro no listener de FCR:", error));
 
+    // Listener para Reports
+    const reportsCollectionRef = collection(db, `/artifacts/${appId}/public/data/reports`);
     onSnapshot(query(reportsCollectionRef), (querySnapshot) => {
         localReports = [];
         querySnapshot.forEach((doc) => {
@@ -305,15 +307,23 @@ function setupFirestoreListener() {
                 localReports.push({ id: doc.id, ...data });
             }
         });
-        localReports.sort((a, b) => {
-            const dateA = a.date.split('/').reverse().join('');
-            const dateB = b.date.split('/').reverse().join('');
-            return dateB.localeCompare(dateA);
-        });
+        localReports.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         renderReportsDashboard();
         filterAndRenderAll(); 
     }, (error) => console.error("Erro no listener de reports:", error));
+
+    // Listener para Ordens de Serviço (O&M)
+    const omCollectionRef = query(collection(db, `/artifacts/${appId}/public/data/o_and_m_orders`), where("status", "==", "em_andamento"));
+    onSnapshot(omCollectionRef, (querySnapshot) => {
+        localOMOrders = [];
+        querySnapshot.forEach((doc) => {
+            localOMOrders.push({ id: doc.id, ...doc.data() });
+        });
+        localOMOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        renderActiveOMOrders(localOMOrders);
+    }, (error) => console.error("Erro no listener de O&M:", error));
 }
+
 
 async function addProtocolToDB(person, category, protocol) {
     const docPath = `/artifacts/${appId}/public/data/scores/${person}`;
@@ -906,6 +916,7 @@ async function saveReport() {
     const content = document.getElementById('report-new-content').value;
     const personName = document.getElementById('report-person-selector').value;
     const impactInput = document.querySelector('input[name="impact"]:checked');
+    const protocoloAssociado = document.getElementById('report-protocolo-associado').value;
 
     if (!content.trim() || !personName || !impactInput) {
         showStatusMessage('Preencha todos os campos do report.', 'error');
@@ -939,6 +950,7 @@ async function saveReport() {
             content,
             personName,
             impact,
+            protocoloAssociado: protocoloAssociado || "",
             authorName: currentAnalystName,
             authorId: currentUserId,
             date,
@@ -948,6 +960,7 @@ async function saveReport() {
         document.getElementById('register-report-modal').classList.add('hidden');
         document.getElementById('report-new-content').value = '';
         document.getElementById('report-person-selector').value = '';
+        document.getElementById('report-protocolo-associado').value = '';
         impactInput.checked = false;
         fileInput.value = '';
     } catch (error) {
@@ -962,6 +975,7 @@ async function updateReport(reportId) {
         content: document.getElementById('report-new-content').value,
         personName: document.getElementById('report-person-selector').value,
         impact: document.querySelector('input[name="impact"]:checked').value,
+        protocoloAssociado: document.getElementById('report-protocolo-associado').value || "",
     };
 
     try {
@@ -980,6 +994,7 @@ function openReportEditModal(report) {
     const impactInput = document.querySelector(`input[name="impact"][value="${report.impact}"]`);
     if(impactInput) impactInput.checked = true;
     document.getElementById('report-new-content').value = report.content;
+    document.getElementById('report-protocolo-associado').value = report.protocoloAssociado || '';
     
     document.querySelector('#register-report-modal h3').textContent = 'Editar Report';
     const submitBtn = document.getElementById('report-modal-submit-btn');
@@ -1069,6 +1084,8 @@ function renderReportsDashboard() {
             </div>
         ` : '';
 
+        const protocoloHtml = report.protocoloAssociado ? `<p class="text-sm text-slate-400 mt-2">Protocolo: <span class="font-semibold text-slate-200">${report.protocoloAssociado}</span></p>` : '';
+
         return `
             <div class="p-4 rounded-lg bg-slate-800 border border-slate-700 report-card" data-report='${JSON.stringify(report)}'>
                 <div class="flex justify-between items-start mb-2">
@@ -1076,6 +1093,7 @@ function renderReportsDashboard() {
                     <span class="text-xs font-bold uppercase px-2 py-1 rounded-full ${getImpactColor(report.impact)}">${report.impact || 'Sem Impacto'}</span>
                 </div>
                 <p class="text-slate-300 mt-2">${contentHtml}</p>
+                ${protocoloHtml}
                 ${imageHtml}
                 <div class="flex justify-between items-center mt-3">
                     <p class="text-xs text-slate-500">Registrado por ${report.authorName} em ${report.date}</p>
@@ -1085,6 +1103,178 @@ function renderReportsDashboard() {
         `;
     }).join('');
 }
+
+// --- Funções de O&M ---
+
+function renderActiveOMOrders(orders) {
+    const container = document.getElementById('om-active-list');
+    if (!container) return;
+
+    if (orders.length === 0) {
+        container.innerHTML = '<p class="text-center text-slate-400 p-4 md:col-span-2 lg:col-span-3">Nenhuma Ordem de Serviço em andamento.</p>';
+        return;
+    }
+
+    container.innerHTML = orders.map(order => {
+        const createdAt = new Date(order.createdAt);
+        const formattedDate = `${createdAt.toLocaleDateString('pt-BR')} às ${createdAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+
+        // Lógica de cores do SLA
+        const now = new Date();
+        const diffInMinutes = (now.getTime() - createdAt.getTime()) / 60000;
+        let slaColorClass = 'border-green-500'; // Padrão
+        if (diffInMinutes > 240) { // Mais de 4 horas
+            slaColorClass = 'border-red-500';
+        } else if (diffInMinutes > 120) { // Mais de 2 horas
+            slaColorClass = 'border-yellow-500';
+        }
+
+        return `
+            <div class="om-card bg-slate-800 border-2 ${slaColorClass} rounded-lg p-4 flex flex-col justify-between" data-order-id="${order.id}" data-created-at="${order.createdAt}">
+                <div>
+                    <h4 class="font-bold text-lg text-indigo-400">${order.motivo}</h4>
+                    <p class="text-sm text-slate-300 font-semibold">${order.cliente}</p>
+                    <p class="text-xs text-slate-400">${order.endereco}</p>
+                    <hr class="my-2 border-slate-600">
+                    <p class="text-sm"><span class="font-semibold">PROTOCOLO NOC:</span> ${order.protocoloNoc}</p>
+                    <p class="text-sm"><span class="font-semibold">PROTOCOLO OEM:</span> ${order.protocoloOem}</p>
+                </div>
+                <div class="mt-4 flex justify-between items-center">
+                    <p class="text-xs text-slate-500">Aberto por ${order.createdBy}<br>em ${formattedDate}</p>
+                    <button class="complete-om-btn bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-lg text-sm">
+                        <i class="fas fa-check-circle mr-1"></i> Marcar como Concluída
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+
+async function saveOMOrder() {
+    const form = document.getElementById('om-form');
+    const data = {
+        motivo: form.querySelector('#om-motivo').value.trim(),
+        cliente: form.querySelector('#om-cliente').value.trim(),
+        endereco: form.querySelector('#om-endereco').value.trim(),
+        localizacao: form.querySelector('#om-localizacao').value.trim(),
+        data: form.querySelector('#om-data').value,
+        horario: form.querySelector('#om-horario').value,
+        porta: form.querySelector('#om-porta').value.trim(),
+        protocoloNoc: form.querySelector('#om-protocolo-noc').value.trim(),
+        protocoloOem: form.querySelector('#om-protocolo-oem').value.trim(),
+        obs: form.querySelector('#om-obs').value.trim(),
+    };
+
+    if (!data.motivo || !data.cliente || !data.protocoloNoc) {
+        showStatusMessage('Preencha os campos Motivo, Cliente e Protocolo NOC.', 'error');
+        return;
+    }
+
+    const newOrder = {
+        ...data,
+        status: 'em_andamento',
+        createdAt: new Date().toISOString(),
+        createdBy: currentAnalystName,
+        completedAt: null,
+        completedBy: null,
+    };
+    
+    try {
+        const collectionRef = collection(db, `/artifacts/${appId}/public/data/o_and_m_orders`);
+        await addDoc(collectionRef, newOrder);
+        document.getElementById('om-modal').classList.add('hidden');
+        openOMCopyModal(newOrder);
+    } catch (error) {
+        showStatusMessage(`Erro ao registrar O.S.: ${error.message}`, 'error');
+    }
+}
+
+async function completeOMOrder(orderId) {
+    const confirmed = await showConfirmationModal(
+        'Concluir Ordem de Serviço',
+        'Você tem certeza que deseja marcar esta O.S. como concluída? A ação não pode ser desfeita.'
+    );
+
+    if (confirmed) {
+        const orderRef = doc(db, `/artifacts/${appId}/public/data/o_and_m_orders`, orderId);
+        try {
+            await updateDoc(orderRef, {
+                status: 'concluido',
+                completedAt: new Date().toISOString(),
+                completedBy: currentAnalystName
+            });
+            showStatusMessage('Ordem de Serviço concluída com sucesso!', 'success');
+        } catch (error) {
+            showStatusMessage(`Erro ao concluir O.S.: ${error.message}`, 'error');
+        }
+    }
+}
+
+
+function openOMCopyModal(order) {
+    const dateFormatted = order.data ? new Date(order.data + 'T00:00:00').toLocaleDateString('pt-BR') : 'N/A';
+    const text = `
+Solicitação de deslocamento:
+
+Motivo: ${order.motivo}
+Cliente: ${order.cliente}
+Endereço: ${order.endereco}
+Localização: ${order.localizacao}
+DATA: ${dateFormatted}
+PORTA: ${order.porta}
+HORÁRIO: ${order.horario}
+PROTOCOLO NOC: ${order.protocoloNoc}
+PROTOCOLO OEM: ${order.protocoloOem}
+OBS: ${order.obs}
+    `.trim();
+    
+    const textArea = document.getElementById('om-copy-textarea');
+    textArea.value = text;
+    document.getElementById('om-copy-modal').classList.remove('hidden');
+}
+
+function copyOMText() {
+    const textArea = document.getElementById('om-copy-textarea');
+    textArea.select();
+    textArea.setSelectionRange(0, 99999); 
+    
+    try {
+        document.execCommand('copy');
+        const copyBtn = document.getElementById('om-copy-btn');
+        copyBtn.innerHTML = '<i class="fas fa-check mr-2"></i>Copiado!';
+        setTimeout(() => {
+            copyBtn.innerHTML = '<i class="fas fa-copy mr-2"></i>Copiar Texto';
+        }, 2000);
+    } catch (err) {
+        showStatusMessage('Erro ao copiar texto.', 'error');
+    }
+}
+
+function startSlaTimer() {
+    if (slaTimer) clearInterval(slaTimer); 
+    slaTimer = setInterval(updateSlaColors, 60000); // Roda a cada 1 minuto
+}
+
+function updateSlaColors() {
+    const cards = document.querySelectorAll('.om-card');
+    cards.forEach(card => {
+        const createdAt = new Date(card.dataset.createdAt);
+        const now = new Date();
+        const diffInMinutes = (now.getTime() - createdAt.getTime()) / 60000;
+
+        card.classList.remove('border-green-500', 'border-yellow-500', 'border-red-500');
+
+        if (diffInMinutes > 240) { // Mais de 4 horas
+            card.classList.add('border-red-500');
+        } else if (diffInMinutes > 120) { // Mais de 2 horas
+            card.classList.add('border-yellow-500');
+        } else {
+            card.classList.add('border-green-500');
+        }
+    });
+}
+
 
 // --- EVENT LISTENERS ---
 function setupEventListeners() {
@@ -1149,6 +1339,7 @@ function setupEventListeners() {
 
         document.getElementById('report-new-content').value = '';
         document.getElementById('report-person-selector').value = '';
+        document.getElementById('report-protocolo-associado').value = '';
         const checkedImpact = document.querySelector('input[name="impact"]:checked');
         if(checkedImpact) checkedImpact.checked = false;
         document.getElementById('report-image-upload').value = '';
@@ -1175,6 +1366,32 @@ function setupEventListeners() {
             const reportCard = e.target.closest('.report-card');
             const reportData = JSON.parse(reportCard.dataset.report);
             openReportEditModal(reportData);
+        }
+    });
+
+    // Event Listeners de O&M
+    document.getElementById('open-om-modal-btn').addEventListener('click', () => {
+        document.getElementById('om-form').reset();
+        document.getElementById('om-modal').classList.remove('hidden');
+    });
+    document.getElementById('om-modal-cancel-btn').addEventListener('click', () => {
+        document.getElementById('om-modal').classList.add('hidden');
+    });
+    document.getElementById('om-modal-submit-btn').addEventListener('click', saveOMOrder);
+    document.getElementById('om-copy-btn').addEventListener('click', copyOMText);
+    document.getElementById('om-copy-modal-close-btn').addEventListener('click', () => {
+        document.getElementById('om-copy-modal').classList.add('hidden');
+    });
+    
+    // Listener para o botão de concluir O.S.
+    document.getElementById('om-active-list').addEventListener('click', (e) => {
+        const completeButton = e.target.closest('.complete-om-btn');
+        if (completeButton) {
+            const card = e.target.closest('.om-card');
+            const orderId = card.dataset.orderId;
+            if (orderId) {
+                completeOMOrder(orderId);
+            }
         }
     });
 

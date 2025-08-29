@@ -177,6 +177,18 @@
                     </div>
                 </section>
 
+                <section id="om-page" class="page-section hidden">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold text-white">Ordens de Serviço (O&M)</h2>
+                        <button id="open-om-modal-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">
+                            <i class="fas fa-plus mr-2"></i> Abrir Nova O.S.
+                        </button>
+                    </div>
+                    <div id="om-active-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Cards de O.S. em andamento serão inseridos aqui -->
+                    </div>
+                </section>
+
                 <section id="admin-panel" class="page-section hidden">
                     <div class="space-y-4">
                         <!-- Acordeão Item 1: Gerenciar Usuários -->
@@ -327,6 +339,10 @@
                     </div>
                 </div>
                 <div>
+                    <label for="report-protocolo-associado" class="block text-sm font-medium text-slate-300">Protocolo Associado (Opcional)</label>
+                    <input type="number" id="report-protocolo-associado" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2" placeholder="Ex: 12345678">
+                </div>
+                <div>
                     <label for="report-new-content" class="block text-sm font-medium text-slate-300">Descrição do Report</label>
                     <textarea id="report-new-content" rows="5" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2" placeholder="Descreva o ocorrido..."></textarea>
                 </div>
@@ -342,6 +358,74 @@
             </div>
         </div>
     </div>
+    
+    <!-- NOVO MODAL O&M -->
+    <div id="om-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 border border-slate-700 max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-bold mb-6 text-white text-center">Abrir Nova Ordem de Serviço</h3>
+            <!-- CORREÇÃO: trocado div por form -->
+            <form id="om-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="md:col-span-2">
+                    <label for="om-motivo" class="block text-sm font-medium text-slate-300">Motivo</label>
+                    <input type="text" id="om-motivo" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                </div>
+                <div>
+                    <label for="om-cliente" class="block text-sm font-medium text-slate-300">Cliente</label>
+                    <input type="text" id="om-cliente" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                </div>
+                <div>
+                    <label for="om-endereco" class="block text-sm font-medium text-slate-300">Endereço</label>
+                    <input type="text" id="om-endereco" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                </div>
+                <div class="md:col-span-2">
+                    <label for="om-localizacao" class="block text-sm font-medium text-slate-300">Localização</label>
+                    <input type="text" id="om-localizacao" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                </div>
+                <div>
+                    <label for="om-data" class="block text-sm font-medium text-slate-300">DATA</label>
+                    <input type="date" id="om-data" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                </div>
+                <div>
+                    <label for="om-horario" class="block text-sm font-medium text-slate-300">HORÁRIO</label>
+                    <input type="time" id="om-horario" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                </div>
+                <div>
+                    <label for="om-porta" class="block text-sm font-medium text-slate-300">PORTA</label>
+                    <input type="text" id="om-porta" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                </div>
+                <div>
+                    <label for="om-protocolo-noc" class="block text-sm font-medium text-slate-300">PROTOCOLO NOC</label>
+                    <input type="text" id="om-protocolo-noc" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                </div>
+                <div>
+                    <label for="om-protocolo-oem" class="block text-sm font-medium text-slate-300">PROTOCOLO OEM</label>
+                    <input type="text" id="om-protocolo-oem" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                </div>
+                <div class="md:col-span-2">
+                    <label for="om-obs" class="block text-sm font-medium text-slate-300">OBS</label>
+                    <textarea id="om-obs" rows="3" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"></textarea>
+                </div>
+            </form>
+            <div class="mt-6 flex justify-end space-x-4">
+                <button id="om-modal-cancel-btn" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg text-white">Cancelar</button>
+                <button id="om-modal-submit-btn" class="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg">Registrar O.S.</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- NOVO MODAL DE CÓPIA O&M -->
+    <div id="om-copy-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 border border-slate-700">
+            <h3 class="text-xl font-bold mb-4 text-white text-center">O.S. Registrada com Sucesso!</h3>
+            <p class="text-center text-slate-300 mb-4">Copie o texto abaixo para o grupo de O&M.</p>
+            <textarea id="om-copy-textarea" rows="12" class="w-full bg-slate-900 text-slate-200 p-2 rounded-md border border-slate-600" readonly></textarea>
+            <div class="mt-6 flex justify-center space-x-4">
+                <button id="om-copy-btn" class="px-6 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white font-bold"><i class="fas fa-copy mr-2"></i>Copiar Texto</button>
+                <button id="om-copy-modal-close-btn" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg text-white">Fechar</button>
+            </div>
+        </div>
+    </div>
+
 
     <script type="module" src="js/main.js"></script>
 </body>
