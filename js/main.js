@@ -58,7 +58,7 @@ let currentAnalystName = '';
 let currentUserId = ''; 
 let currentUserRole = '';
 let confirmationResolve = null;
-let slaTimer = null; // Timer para atualização do SLA
+let slaTimer = null;
 
 // --- CONFIGURAÇÃO GLOBAL DO CHART.JS PARA TEMA ESCURO ---
 Chart.defaults.color = '#CBD5E1'; 
@@ -80,7 +80,6 @@ function navigateTo(pageId, title) {
         }
     });
 
-    // Fecha o menu mobile ao navegar
     sidebar.classList.add('-translate-x-full');
     document.getElementById('mobile-menu-overlay').classList.add('hidden');
 }
@@ -1164,15 +1163,45 @@ function renderActiveOMOrders(orders) {
         const createdAt = new Date(order.createdAt);
         const formattedDate = `${createdAt.toLocaleDateString('pt-BR')} às ${createdAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 
+        let appropriationHtml = '';
+        if (order.appropriatedBy) {
+            let releaseBtn = '';
+            if (order.appropriatedById === currentUserId) {
+                releaseBtn = `<button class="release-om-btn text-xs text-red-400 hover:text-red-300 ml-2">(Liberar)</button>`;
+            }
+            appropriationHtml = `
+                <div class="mt-3 p-2 bg-slate-700/50 rounded-md text-center">
+                    <p class="text-sm font-semibold text-amber-400">
+                        <i class="fas fa-user-check mr-2"></i>Em tratativa por: ${order.appropriatedBy} ${releaseBtn}
+                    </p>
+                </div>
+            `;
+        } else {
+            appropriationHtml = `
+                <div class="mt-3">
+                    <button class="appropriate-om-btn w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-3 rounded-lg text-sm">
+                        <i class="fas fa-hand-paper mr-1"></i> Apropriar-se
+                    </button>
+                </div>
+            `;
+        }
+
         return `
-            <div class="om-card bg-slate-800 border-2 rounded-lg p-4 flex flex-col justify-between" data-order-id="${order.id}" data-created-at="${order.createdAt}">
+            <div class="om-card bg-slate-800 border-2 rounded-lg p-4 flex flex-col justify-between" data-order-id="${order.id}" data-created-at="${order.createdAt}" data-appropriated-at="${order.appropriatedAt || ''}">
                 <div>
-                    <h4 class="font-bold text-lg text-indigo-400">${order.motivo}</h4>
+                    <div class="flex justify-between items-start">
+                        <h4 class="font-bold text-lg text-indigo-400">${order.motivo}</h4>
+                        <div id="sla-30min-warning-${order.id}" class="hidden items-center text-red-400 animate-pulse">
+                            <i class="fas fa-exclamation-triangle mr-2"></i>
+                            <span class="font-bold text-sm">SLA 30min</span>
+                        </div>
+                    </div>
                     <p class="text-sm text-slate-300 font-semibold">${order.cliente}</p>
                     <p class="text-xs text-slate-400">${order.endereco}</p>
                     <hr class="my-2 border-slate-600">
                     <p class="text-sm"><span class="font-semibold">PROTOCOLO NOC:</span> ${order.protocoloNoc}</p>
                     <p class="text-sm"><span class="font-semibold">PROTOCOLO OEM:</span> ${order.protocoloOem}</p>
+                    ${appropriationHtml}
                 </div>
                 <div class="mt-4 flex justify-between items-center">
                     <p class="text-xs text-slate-500">Aberto por ${order.createdBy}<br>em ${formattedDate}</p>
@@ -1183,7 +1212,7 @@ function renderActiveOMOrders(orders) {
             </div>
         `;
     }).join('');
-    updateSlaColors();
+    updateSlaStatus();
 }
 
 function renderScheduledOMOrders(orders) {
@@ -1221,7 +1250,6 @@ function renderScheduledOMOrders(orders) {
     }).join('');
 }
 
-
 async function saveOMOrder() {
     const form = document.getElementById('om-form');
     const isScheduled = form.querySelector('#om-schedule-checkbox').checked;
@@ -1258,6 +1286,9 @@ async function saveOMOrder() {
         createdBy: currentAnalystName,
         completedAt: null,
         completedBy: null,
+        appropriatedBy: null,
+        appropriatedById: null,
+        appropriatedAt: null
     };
     
     try {
@@ -1281,7 +1312,7 @@ async function startOMOrder(orderId) {
         try {
             await updateDoc(orderRef, {
                 status: 'em_andamento',
-                createdAt: new Date().toISOString(), // Reinicia o tempo de criação para o SLA
+                createdAt: new Date().toISOString(),
                 scheduledFor: null
             });
             showStatusMessage('O.S. iniciada com sucesso!', 'success');
@@ -1309,6 +1340,46 @@ async function completeOMOrder(orderId) {
             showStatusMessage('Ordem de Serviço concluída com sucesso!', 'success');
         } catch (error) {
             showStatusMessage(`Erro ao concluir O.S.: ${error.message}`, 'error');
+        }
+    }
+}
+
+async function appropriateOMOrder(orderId) {
+    const confirmed = await showConfirmationModal(
+        'Apropriar-se da O.S.',
+        'Você tem certeza? Esta ação registrará que você está tratando esta atividade e iniciará um SLA pessoal de 30 minutos.'
+    );
+    if (confirmed) {
+        const orderRef = doc(db, `/artifacts/${appId}/public/data/o_and_m_orders`, orderId);
+        try {
+            await updateDoc(orderRef, {
+                appropriatedBy: currentAnalystName,
+                appropriatedById: currentUserId,
+                appropriatedAt: new Date().toISOString()
+            });
+            showStatusMessage('Você se apropriou da O.S.!', 'success');
+        } catch (error) {
+            showStatusMessage(`Erro ao apropriar-se: ${error.message}`, 'error');
+        }
+    }
+}
+
+async function releaseOMOrder(orderId) {
+    const confirmed = await showConfirmationModal(
+        'Liberar O.S.',
+        'Tem certeza que deseja liberar esta atividade? Ela voltará para a fila geral.'
+    );
+    if (confirmed) {
+        const orderRef = doc(db, `/artifacts/${appId}/public/data/o_and_m_orders`, orderId);
+        try {
+            await updateDoc(orderRef, {
+                appropriatedBy: null,
+                appropriatedById: null,
+                appropriatedAt: null
+            });
+            showStatusMessage('O.S. liberada com sucesso!', 'success');
+        } catch (error) {
+            showStatusMessage(`Erro ao liberar O.S.: ${error.message}`, 'error');
         }
     }
 }
@@ -1355,10 +1426,10 @@ function copyOMText() {
 
 function startSlaTimer() {
     if (slaTimer) clearInterval(slaTimer); 
-    slaTimer = setInterval(updateSlaColors, 60000); // Roda a cada 1 minuto
+    slaTimer = setInterval(updateSlaStatus, 60000);
 }
 
-function updateSlaColors() {
+function updateSlaStatus() {
     const cards = document.querySelectorAll('.om-card');
     cards.forEach(card => {
         const createdAt = new Date(card.dataset.createdAt);
@@ -1367,12 +1438,28 @@ function updateSlaColors() {
 
         card.classList.remove('border-green-500', 'border-yellow-500', 'border-red-500');
 
-        if (diffInMinutes > 240) { // Mais de 4 horas
+        if (diffInMinutes > 240) {
             card.classList.add('border-red-500');
-        } else if (diffInMinutes > 120) { // Mais de 2 horas
+        } else if (diffInMinutes > 120) {
             card.classList.add('border-yellow-500');
         } else {
             card.classList.add('border-green-500');
+        }
+
+        const appropriatedAtStr = card.dataset.appropriatedAt;
+        if (appropriatedAtStr) {
+            const appropriatedAt = new Date(appropriatedAtStr);
+            const diffAppropriatedMinutes = (now.getTime() - appropriatedAt.getTime()) / 60000;
+            const warningEl = document.getElementById(`sla-30min-warning-${card.dataset.orderId}`);
+            if (warningEl) {
+                if (diffAppropriatedMinutes > 30) {
+                    warningEl.classList.remove('hidden');
+                    warningEl.classList.add('flex');
+                } else {
+                    warningEl.classList.add('hidden');
+                    warningEl.classList.remove('flex');
+                }
+            }
         }
     });
 }
@@ -1632,9 +1719,21 @@ function setupEventListeners() {
         if (completeButton) {
             const card = e.target.closest('.om-card');
             const orderId = card.dataset.orderId;
-            if (orderId) {
-                completeOMOrder(orderId);
-            }
+            if (orderId) completeOMOrder(orderId);
+        }
+
+        const appropriateButton = e.target.closest('.appropriate-om-btn');
+        if (appropriateButton) {
+            const card = e.target.closest('.om-card');
+            const orderId = card.dataset.orderId;
+            if (orderId) appropriateOMOrder(orderId);
+        }
+
+        const releaseButton = e.target.closest('.release-om-btn');
+        if (releaseButton) {
+            const card = e.target.closest('.om-card');
+            const orderId = card.dataset.orderId;
+            if (orderId) releaseOMOrder(orderId);
         }
     });
 
