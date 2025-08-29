@@ -103,18 +103,17 @@
                     </div>
                     <div id="summary-page" class="subpage-section">
                         <section class="mb-8 p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
-                            <label for="time-filter" class="block text-sm font-medium text-slate-300">Filtrar Período</label>
-                            <select id="time-filter" class="mt-1 block w-full md:w-1/3 bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3">
-                                <option value="always">Sempre</option>
-                                <option value="today">Hoje</option>
-                                <option value="3days">Últimos 3 dias</option>
-                                <option value="7days">Última semana</option>
-                                <option value="14days">Últimas 2 semanas</option>
-                                <option value="1month">Último mês</option>
-                                <option value="3months">Últimos 3 meses</option>
-                                <option value="1year">Último ano</option>
-                                <option value="2years">Últimos 2 anos</option>
-                            </select>
+                            <div class="flex items-end gap-4">
+                                <div>
+                                    <label for="start-date-filter" class="block text-sm font-medium text-slate-300">Data de Início</label>
+                                    <input type="date" id="start-date-filter" class="mt-1 bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                                </div>
+                                <div>
+                                    <label for="end-date-filter" class="block text-sm font-medium text-slate-300">Data Final</label>
+                                    <input type="date" id="end-date-filter" class="mt-1 bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                                </div>
+                                <button id="custom-time-filter-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">Filtrar</button>
+                            </div>
                         </section>
                         <section id="summary-section" class="mb-8 p-4 bg-slate-900/50 rounded-lg">
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -129,7 +128,7 @@
                         <section class="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
                             <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-4 text-white">Evolução por Agente (12 Meses)</h2><canvas id="agent-evolution-chart"></canvas></div>
                             <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-2 text-white">Evolução por Categoria (12 Meses)</h2><select id="category-chart-selector" class="block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3 mb-4"></select><canvas id="category-evolution-chart"></canvas></div>
-                            <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-2 text-white">Porcentagem FCR vs. Escalonados</h2><select id="fcr-vs-escalation-selector" class="block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3 mb-4"></select><canvas id="fcr-vs-escalonado-chart"></canvas></div>
+                            <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-2 text-white">Desempenho: FCR vs Escalonados vs Reports</h2><select id="fcr-vs-escalation-selector" class="block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3 mb-4"></select><canvas id="fcr-vs-escalonado-chart"></canvas></div>
                             <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-4 text-white">Tendência FCR vs. Escalonados (12 Meses)</h2><canvas id="fcr-escalonado-trend-chart"></canvas></div>
                         </section>
                     </div>
@@ -138,7 +137,6 @@
                     </div>
                 </div>
                 
-                <!-- NOVO: Seção do Dashboard N1 -->
                 <section id="n1-dashboard-page" class="page-section hidden">
                     <h2 class="text-2xl font-bold mb-4 text-white">Meus FCRs Aprovados</h2>
                     <div id="n1-fcr-summary" class="space-y-4">
@@ -146,11 +144,9 @@
                     </div>
                 </section>
 
-                <!-- NOVO: Seção de Reports -->
                 <section id="reports-page" class="page-section hidden">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-2xl font-bold text-white">Reports Registrados</h2>
-                        <!-- NOVO BOTÃO -->
                         <button id="open-register-report-modal-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">
                             <i class="fas fa-plus mr-2"></i> Registrar Novo Report
                         </button>
@@ -283,7 +279,6 @@
             <div id="protocols-modal-content" class="overflow-y-auto space-y-4"></div>
         </div>
     </div>
-    <!-- NOVO MODAL DE CONFIRMAÇÃO -->
     <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
         <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 border border-slate-700">
             <h3 id="confirmation-modal-title" class="text-xl font-bold mb-4 text-white">Confirmar Ação</h3>
@@ -295,7 +290,6 @@
         </div>
     </div>
 
-    <!-- NOVO MODAL PARA REGISTRAR REPORT -->
     <div id="register-report-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
         <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 border border-slate-700">
             <h3 class="text-xl font-bold mb-4 text-white">Registrar Report de Operação</h3>
@@ -315,7 +309,6 @@
                     <label for="report-new-content" class="block text-sm font-medium text-slate-300">Descrição do Report</label>
                     <textarea id="report-new-content" rows="5" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2" placeholder="Descreva o ocorrido..."></textarea>
                 </div>
-                <!-- NOVO CAMPO DE UPLOAD -->
                 <div>
                     <label for="report-image-upload" class="block text-sm font-medium text-slate-300">Anexar Imagem (Opcional)</label>
                     <input type="file" id="report-image-upload" accept="image/*" class="mt-1 block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>

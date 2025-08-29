@@ -193,7 +193,14 @@ async function main() {
                     await loadConfigData();
                     setupReportModal();
                     setupUIForRole(currentUserRole);
-                    setupFirestoreListener();
+
+                    // Define datas padrão e carrega dados iniciais
+                    const today = new Date();
+                    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                    document.getElementById('end-date-filter').valueAsDate = today;
+                    document.getElementById('start-date-filter').valueAsDate = firstDayOfMonth;
+                    
+                    setupFirestoreListener(); // O listener chamará filterAndRenderAll()
                     
                     navigateTo('home-screen', 'Início');
                     showSubPage('summary-page');
@@ -325,34 +332,31 @@ async function addFcrProtocolToDB(person, category, protocol) {
 
 // --- FILTRAGEM, CÁLCULOS E RENDERIZAÇÃO ---
 function filterAndRenderAll() {
-    const period = document.getElementById('time-filter').value;
-    const filteredScores = filterScoresByPeriod(localScores, period);
-    const filteredFcrScores = filterScoresByPeriod(localFcrScores, period);
+    const startDate = document.getElementById('start-date-filter').value;
+    const endDate = document.getElementById('end-date-filter').value;
+
+    const filteredScores = filterScoresByPeriod(localScores, startDate, endDate);
+    const filteredFcrScores = filterScoresByPeriod(localFcrScores, startDate, endDate);
+    const filteredReports = filterReportsByPeriod(localReports, startDate, endDate);
+    
     const weights = calculateAllWeights(filteredScores);
     updateTotals(filteredScores, filteredFcrScores);
     renderIndividualDashboard(filteredScores, weights);
     renderWeightRanking(weights);
     renderAgentEvolutionChart(localScores);
     renderCategoryEvolutionChart(localScores);
-    renderFcrVsEscalonadoChart(filteredScores, filteredFcrScores);
+    renderFcrVsEscalonadoChart(filteredScores, filteredFcrScores, filteredReports);
     renderFcrEscalonadoTrendChart(localScores, localFcrScores);
 }
 
-function filterScoresByPeriod(scores, period) {
-    if (period === 'always') return scores;
-    const now = new Date();
-    let startDate = new Date();
-    switch (period) {
-        case 'today': startDate.setDate(now.getDate()); break;
-        case '3days': startDate.setDate(now.getDate() - 3); break;
-        case '7days': startDate.setDate(now.getDate() - 7); break;
-        case '14days': startDate.setDate(now.getDate() - 14); break;
-        case '1month': startDate.setMonth(now.getMonth() - 1); break;
-        case '3months': startDate.setMonth(now.getMonth() - 3); break;
-        case '1year': startDate.setFullYear(now.getFullYear() - 1); break;
-        case '2years': startDate.setFullYear(now.getFullYear() - 2); break;
-    }
-    startDate.setHours(0, 0, 0, 0);
+function filterScoresByPeriod(scores, startDateStr, endDateStr) {
+    if (!startDateStr || !endDateStr) return scores;
+
+    const startDate = new Date(startDateStr);
+    startDate.setUTCHours(0, 0, 0, 0);
+    const endDate = new Date(endDateStr);
+    endDate.setUTCHours(23, 59, 59, 999);
+    
     const filtered = {};
     for (const person in scores) {
         filtered[person] = {};
@@ -362,8 +366,8 @@ function filterScoresByPeriod(scores, period) {
                 filtered[person][category] = categoryData.filter(entry => {
                     if (entry && typeof entry === 'object' && entry.date) {
                         const [day, month, year] = entry.date.split('/');
-                        const entryDate = new Date(year, month - 1, day);
-                        return entryDate >= startDate;
+                        const entryDate = new Date(Date.UTC(year, month - 1, day));
+                        return entryDate >= startDate && entryDate <= endDate;
                     }
                     return false;
                 });
@@ -371,6 +375,24 @@ function filterScoresByPeriod(scores, period) {
         }
     }
     return filtered;
+}
+
+function filterReportsByPeriod(reports, startDateStr, endDateStr) {
+    if (!startDateStr || !endDateStr) return reports;
+
+    const startDate = new Date(startDateStr);
+    startDate.setUTCHours(0, 0, 0, 0);
+    const endDate = new Date(endDateStr);
+    endDate.setUTCHours(23, 59, 59, 999);
+
+    return reports.filter(report => {
+        if (report && report.date) {
+            const [day, month, year] = report.date.split('/');
+            const entryDate = new Date(Date.UTC(year, month - 1, day));
+            return entryDate >= startDate && entryDate <= endDate;
+        }
+        return false;
+    });
 }
 
 function calculateAllWeights(filteredScores) {
@@ -555,13 +577,15 @@ function renderCategoryEvolutionChart(scores) {
     categoryEvolutionChart = new Chart(ctx, { type: 'line', data: { labels, datasets: [dataset] } });
 }
 
-function renderFcrVsEscalonadoChart(filteredEscalonamentos, filteredFCR) {
+function renderFcrVsEscalonadoChart(filteredEscalonamentos, filteredFCR, filteredReports) {
     const selectedPerson = document.getElementById('fcr-vs-escalation-selector').value;
     const ctx = document.getElementById('fcr-vs-escalonado-chart').getContext('2d');
     if (!ctx) return;
     if (fcrVsEscalonadoChart) fcrVsEscalonadoChart.destroy();
     if (!selectedPerson) return;
+    
     const escalonamentosCount = Object.values(filteredEscalonamentos[selectedPerson] || {}).reduce((sum, cat) => sum + cat.length, 0);
+    
     let fcrCount = 0;
     const personFcrData = filteredFCR[selectedPerson] || {};
     Object.values(personFcrData).forEach(categoryProtocols => {
@@ -570,12 +594,14 @@ function renderFcrVsEscalonadoChart(filteredEscalonamentos, filteredFCR) {
         }
     });
 
+    const reportsCount = filteredReports.filter(r => r.personName === selectedPerson).length;
+
     const data = {
-        labels: ['Escalonados', 'FCR (Aprovados)'],
+        labels: ['Escalonados', 'FCR (Aprovados)', 'Reports'],
         datasets: [{
-            label: `Protocolos de ${selectedPerson}`,
-            data: [escalonamentosCount, fcrCount],
-            backgroundColor: ['#F87171', '#4ADE80'],
+            label: `Registros de ${selectedPerson}`,
+            data: [escalonamentosCount, fcrCount, reportsCount],
+            backgroundColor: ['#F87171', '#4ADE80', '#60A5FA'],
             borderColor: '#1E293B',
             hoverOffset: 4
         }]
@@ -908,7 +934,6 @@ function openReportEditModal(report) {
     
     submitBtn.dataset.editingId = report.id;
     
-    // Esconde o upload de imagem na edição por simplicidade
     document.getElementById('report-image-upload').parentElement.classList.add('hidden');
 
     document.getElementById('register-report-modal').classList.remove('hidden');
@@ -1039,7 +1064,7 @@ function setupEventListeners() {
     document.getElementById('modal-cancel-btn').addEventListener('click', () => inputModal.classList.add('hidden'));
     document.getElementById('protocols-modal-close-btn').addEventListener('click', () => document.getElementById('protocols-modal').classList.add('hidden'));
     document.getElementById('person-selector').addEventListener('change', filterAndRenderAll);
-    document.getElementById('time-filter').addEventListener('change', filterAndRenderAll);
+    document.getElementById('custom-time-filter-btn').addEventListener('click', filterAndRenderAll);
     document.getElementById('category-chart-selector').addEventListener('change', () => renderCategoryEvolutionChart(localScores));
     document.getElementById('fcr-vs-escalation-selector').addEventListener('change', filterAndRenderAll);
 
@@ -1069,14 +1094,11 @@ function setupEventListeners() {
         submitBtn.textContent = 'Salvar Report';
         delete submitBtn.dataset.editingId;
 
-        // Limpa o formulário antes de abrir
         document.getElementById('report-new-content').value = '';
         document.getElementById('report-person-selector').value = '';
         const checkedImpact = document.querySelector('input[name="impact"]:checked');
         if(checkedImpact) checkedImpact.checked = false;
         document.getElementById('report-image-upload').value = '';
-
-        // Mostra o upload de imagem ao criar novo report
         document.getElementById('report-image-upload').parentElement.classList.remove('hidden');
 
         document.getElementById('register-report-modal').classList.remove('hidden');
