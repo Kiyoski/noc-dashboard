@@ -9,23 +9,6 @@ body {
 .dark .text-slate-300 { color: #CBD5E1; }
 .dark .text-slate-400 { color: #94A3B8; }
 
-/* --- Tela de Carregamento --- */
-.loader {
-    border-top-color: #6366F1; /* indigo-500 */
-    -webkit-animation: spinner 1.5s linear infinite;
-    animation: spinner 1.5s linear infinite;
-}
-
-@-webkit-keyframes spinner {
-    0% { -webkit-transform: rotate(0deg); }
-    100% { -webkit-transform: rotate(360deg); }
-}
-
-@keyframes spinner {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
 /* --- Estilos do Menu Lateral (Sidebar) --- */
 .sidebar-item {
     display: flex;
@@ -95,7 +78,7 @@ body {
 }
 
 .accordion-content {
-    padding: 0 1.5rem;
+    padding: 0 1.5rem; /* Remove padding vertical quando fechado */
     max-height: 0;
     overflow: hidden;
     transition: max-height 0.3s ease-out, padding 0.3s ease-out;
@@ -103,13 +86,33 @@ body {
 
 .accordion-content.open {
     padding: 1.5rem;
-    max-height: 1000px;
+    max-height: 1000px; /* Altura suficiente para o conteúdo */
     transition: max-height 0.5s ease-in, padding 0.5s ease-in;
 }
 
 .accordion-header.active .fa-chevron-down {
     transform: rotate(180deg);
 }
+
+/* --- Estilos de O&M --- */
+.om-subpage-btn {
+    border-color: transparent;
+    transition: color 0.2s, border-color 0.2s;
+}
+
+
+/* --- Loader da tela de carregamento --- */
+.loader {
+    border-top-color: #4f46e5; /* indigo-600 */
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 
 /* --- Outros Estilos --- */
 .category-card {
@@ -133,3 +136,4 @@ input[type=number]::-webkit-outer-spin-button {
 input[type=number] { 
     -moz-appearance: textfield; 
 }
+

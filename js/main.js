@@ -1,6 +1,6 @@
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js";
-import { getFirestore, doc, onSnapshot, setDoc, writeBatch, collection, getDocs, arrayUnion, updateDoc, getDoc, arrayRemove, addDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
+import { getFirestore, doc, onSnapshot, setDoc, writeBatch, collection, getDocs, arrayUnion, updateDoc, getDoc, arrayRemove, addDoc, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.3/firebase-storage.js";
 
 // --- CONFIGURAÇÃO ---
@@ -50,8 +50,9 @@ let localScores = {};
 let localFcrScores = {};
 let localReports = [];
 let localOMOrders = [];
+let localOMOrdersHistoric = [];
 let modalContext = {};
-let agentEvolutionChart, categoryEvolutionChart, fcrVsEscalonadoChart, fcrEscalonadoTrendChart;
+let agentEvolutionChart, categoryEvolutionChart, fcrVsEscalonadoChart, fcrEscalonadoTrendChart, omReasonChart;
 let currentAnalystName = '';
 let currentUserId = ''; 
 let currentUserRole = '';
@@ -77,6 +78,10 @@ function navigateTo(pageId, title) {
             item.classList.add('active');
         }
     });
+
+    // Fecha o menu mobile ao navegar
+    sidebar.classList.add('-translate-x-full');
+    document.getElementById('mobile-menu-overlay').classList.add('hidden');
 }
 
 function setupUIForRole(role) {
@@ -149,6 +154,20 @@ function showSubPage(subpageId) {
     });
 }
 
+function showOMSubPage(subpageId) {
+    document.querySelectorAll('.om-subpage').forEach(section => section.classList.add('hidden'));
+    document.getElementById(subpageId).classList.remove('hidden');
+
+    document.querySelectorAll('.om-subpage-btn').forEach(btn => {
+        btn.classList.remove('border-b-2', 'border-indigo-500', 'text-white');
+        btn.classList.add('text-slate-400');
+        if (btn.dataset.omSubpage === subpageId) {
+            btn.classList.add('border-b-2', 'border-indigo-500', 'text-white');
+            btn.classList.remove('text-slate-400');
+        }
+    });
+}
+
 // --- FUNÇÕES DE UTILIDADE ---
 function showStatusMessage(message, type) {
     statusMessageEl.textContent = message;
@@ -216,10 +235,11 @@ async function main() {
                     document.getElementById('start-date-filter').valueAsDate = firstDayOfMonth;
                     
                     setupFirestoreListener(); 
-                    startSlaTimer(); // Inicia o timer do SLA
+                    startSlaTimer(); 
                     
                     navigateTo('home-screen', 'Início');
                     showSubPage('summary-page');
+                    showOMSubPage('om-active-section');
 
                     loginScreen.classList.add('hidden');
                     appScreen.classList.remove('hidden');
@@ -279,7 +299,7 @@ async function loadConfigData() {
 }
 
 function setupFirestoreListener() {
-    // Listener para Scores de Escalonamento
+    // Scores
     const scoresCollectionRef = collection(db, `/artifacts/${appId}/public/data/scores`);
     onSnapshot(scoresCollectionRef, (querySnapshot) => {
         localScores = {};
@@ -287,7 +307,7 @@ function setupFirestoreListener() {
         filterAndRenderAll();
     }, (error) => console.error("Erro no listener de escalonamento:", error));
 
-    // Listener para Scores de FCR
+    // FCRs
     const fcrCollectionRef = collection(db, `/artifacts/${appId}/public/data/fcr_scores`);
     onSnapshot(fcrCollectionRef, (querySnapshot) => {
         localFcrScores = {};
@@ -297,7 +317,7 @@ function setupFirestoreListener() {
         if (currentUserRole === 'n1') renderMyFcrDashboard();
     }, (error) => console.error("Erro no listener de FCR:", error));
 
-    // Listener para Reports
+    // Reports
     const reportsCollectionRef = collection(db, `/artifacts/${appId}/public/data/reports`);
     onSnapshot(query(reportsCollectionRef), (querySnapshot) => {
         localReports = [];
@@ -312,16 +332,27 @@ function setupFirestoreListener() {
         filterAndRenderAll(); 
     }, (error) => console.error("Erro no listener de reports:", error));
 
-    // Listener para Ordens de Serviço (O&M)
-    const omCollectionRef = query(collection(db, `/artifacts/${appId}/public/data/o_and_m_orders`), where("status", "==", "em_andamento"));
-    onSnapshot(omCollectionRef, (querySnapshot) => {
+    // O&M - Em Andamento
+    const omActiveRef = query(collection(db, `/artifacts/${appId}/public/data/o_and_m_orders`), where("status", "==", "em_andamento"));
+    onSnapshot(omActiveRef, (querySnapshot) => {
         localOMOrders = [];
         querySnapshot.forEach((doc) => {
             localOMOrders.push({ id: doc.id, ...doc.data() });
         });
         localOMOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         renderActiveOMOrders(localOMOrders);
-    }, (error) => console.error("Erro no listener de O&M:", error));
+    }, (error) => console.error("Erro no listener de O&M (Ativas):", error));
+
+    // O&M - Histórico
+    const omHistoricRef = query(collection(db, `/artifacts/${appId}/public/data/o_and_m_orders`), where("status", "==", "concluido"), orderBy("completedAt", "desc"), limit(100));
+    onSnapshot(omHistoricRef, (querySnapshot) => {
+        localOMOrdersHistoric = [];
+        querySnapshot.forEach((doc) => {
+            localOMOrdersHistoric.push({ id: doc.id, ...doc.data() });
+        });
+        filterAndRenderOMHistory();
+        renderOMMetrics();
+    }, (error) => console.error("Erro no listener de O&M (Histórico):", error));
 }
 
 
@@ -377,6 +408,7 @@ function filterAndRenderAll() {
     renderCategoryEvolutionChart(localScores);
     renderFcrVsEscalonadoChart(filteredScores, filteredFcrScores, filteredReports);
     renderFcrEscalonadoTrendChart(localScores, localFcrScores);
+    renderOMMetrics();
 }
 
 function filterScoresByPeriod(scores, startDateStr, endDateStr) {
@@ -1119,18 +1151,8 @@ function renderActiveOMOrders(orders) {
         const createdAt = new Date(order.createdAt);
         const formattedDate = `${createdAt.toLocaleDateString('pt-BR')} às ${createdAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 
-        // Lógica de cores do SLA
-        const now = new Date();
-        const diffInMinutes = (now.getTime() - createdAt.getTime()) / 60000;
-        let slaColorClass = 'border-green-500'; // Padrão
-        if (diffInMinutes > 240) { // Mais de 4 horas
-            slaColorClass = 'border-red-500';
-        } else if (diffInMinutes > 120) { // Mais de 2 horas
-            slaColorClass = 'border-yellow-500';
-        }
-
         return `
-            <div class="om-card bg-slate-800 border-2 ${slaColorClass} rounded-lg p-4 flex flex-col justify-between" data-order-id="${order.id}" data-created-at="${order.createdAt}">
+            <div class="om-card bg-slate-800 border-2 rounded-lg p-4 flex flex-col justify-between" data-order-id="${order.id}" data-created-at="${order.createdAt}">
                 <div>
                     <h4 class="font-bold text-lg text-indigo-400">${order.motivo}</h4>
                     <p class="text-sm text-slate-300 font-semibold">${order.cliente}</p>
@@ -1148,6 +1170,7 @@ function renderActiveOMOrders(orders) {
             </div>
         `;
     }).join('');
+    updateSlaColors(); // Garante que as cores sejam aplicadas na renderização inicial
 }
 
 
@@ -1275,6 +1298,140 @@ function updateSlaColors() {
     });
 }
 
+// Funções de Histórico e Métricas de O&M
+function filterAndRenderOMHistory() {
+    const searchTerm = document.getElementById('om-search-input').value.toLowerCase();
+    const dateFilter = document.getElementById('om-history-date-filter').value;
+    
+    let filteredOrders = localOMOrdersHistoric;
+
+    if (searchTerm) {
+        filteredOrders = filteredOrders.filter(order => 
+            order.motivo.toLowerCase().includes(searchTerm) ||
+            order.cliente.toLowerCase().includes(searchTerm) ||
+            order.protocoloNoc.toLowerCase().includes(searchTerm) ||
+            order.protocoloOem.toLowerCase().includes(searchTerm)
+        );
+    }
+
+    if (dateFilter) {
+        const filterDate = new Date(dateFilter + "T00:00:00").toLocaleDateString('pt-BR');
+        filteredOrders = filteredOrders.filter(order => {
+             const orderDate = new Date(order.createdAt).toLocaleDateString('pt-BR');
+             return orderDate === filterDate;
+        });
+    }
+    
+    renderHistoricOMOrders(filteredOrders);
+}
+
+function renderHistoricOMOrders(orders) {
+    const container = document.getElementById('om-historic-list');
+    if (!container) return;
+
+    if (orders.length === 0) {
+        container.innerHTML = '<p class="text-center text-slate-400 p-4">Nenhum registro encontrado para os filtros selecionados.</p>';
+        return;
+    }
+
+    container.innerHTML = orders.map(order => {
+        const createdAt = new Date(order.createdAt);
+        const completedAt = new Date(order.completedAt);
+        const durationMs = completedAt.getTime() - createdAt.getTime();
+        const durationHours = Math.floor(durationMs / 3600000);
+        const durationMinutes = Math.round((durationMs % 3600000) / 60000);
+        
+        return `
+            <div class="bg-slate-800 border border-slate-700 rounded-lg p-4">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h4 class="font-bold text-lg text-indigo-400">${order.motivo}</h4>
+                        <p class="text-sm text-slate-300 font-semibold">${order.cliente}</p>
+                    </div>
+                    <div class="text-right">
+                         <p class="text-sm font-bold text-green-400">Concluída</p>
+                         <p class="text-xs text-slate-400">em ${completedAt.toLocaleDateString('pt-BR')}</p>
+                    </div>
+                </div>
+                <hr class="my-2 border-slate-600">
+                <p class="text-sm"><span class="font-semibold">PROTOCOLO NOC:</span> ${order.protocoloNoc}</p>
+                 <div class="text-xs text-slate-500 mt-3 flex justify-between">
+                    <span>Aberto por: ${order.createdBy}</span>
+                    <span>Fechado por: ${order.completedBy}</span>
+                    <span>Duração: ${durationHours}h ${durationMinutes}m</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+
+function renderOMMetrics() {
+    const startDateStr = document.getElementById('start-date-filter').value;
+    const endDateStr = document.getElementById('end-date-filter').value;
+
+    let ordersInPeriod = localOMOrdersHistoric;
+    if (startDateStr && endDateStr) {
+        const startNum = parseInt(startDateStr.replace(/-/g, ''), 10);
+        const endNum = parseInt(endDateStr.replace(/-/g, ''), 10);
+
+        ordersInPeriod = localOMOrdersHistoric.filter(order => {
+            if (!order.completedAt) return false;
+            const completedDateStr = order.completedAt.substring(0, 10);
+            const completedNum = parseInt(completedDateStr.replace(/-/g, ''), 10);
+            return completedNum >= startNum && completedNum <= endNum;
+        });
+    }
+
+    // KPI 1: Total Concluídas
+    document.getElementById('om-total-concluidas').textContent = ordersInPeriod.length;
+
+    // KPI 2: Tempo Médio de Conclusão
+    if (ordersInPeriod.length > 0) {
+        const totalDurationMs = ordersInPeriod.reduce((sum, order) => {
+            const duration = new Date(order.completedAt).getTime() - new Date(order.createdAt).getTime();
+            return sum + duration;
+        }, 0);
+        const avgMs = totalDurationMs / ordersInPeriod.length;
+        const avgHours = Math.floor(avgMs / 3600000);
+        const avgMinutes = Math.round((avgMs % 3600000) / 60000);
+        document.getElementById('om-avg-time').textContent = `${avgHours}h ${avgMinutes}m`;
+    } else {
+        document.getElementById('om-avg-time').textContent = '0h 0m';
+    }
+
+    // Gráfico: O.S. por Motivo
+    const reasonCounts = ordersInPeriod.reduce((acc, order) => {
+        acc[order.motivo] = (acc[order.motivo] || 0) + 1;
+        return acc;
+    }, {});
+    
+    const sortedReasons = Object.entries(reasonCounts).sort(([,a],[,b]) => b-a);
+    const labels = sortedReasons.map(item => item[0]);
+    const data = sortedReasons.map(item => item[1]);
+
+    const ctx = document.getElementById('om-reason-chart').getContext('2d');
+    if(omReasonChart) omReasonChart.destroy();
+    omReasonChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Nº de Ordens de Serviço',
+                data: data,
+                backgroundColor: '#4f46e5',
+                borderColor: '#818CF8',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
 
 // --- EVENT LISTENERS ---
 function setupEventListeners() {
@@ -1313,6 +1470,10 @@ function setupEventListeners() {
 
     document.querySelectorAll('.subpage-btn').forEach(btn => {
         btn.addEventListener('click', () => showSubPage(btn.dataset.subpage));
+    });
+
+    document.querySelectorAll('.om-subpage-btn').forEach(btn => {
+        btn.addEventListener('click', () => showOMSubPage(btn.dataset.omSubpage));
     });
 
     document.querySelectorAll('.accordion-header').forEach(header => {
@@ -1369,7 +1530,7 @@ function setupEventListeners() {
         }
     });
 
-    // Event Listeners de O&M
+    // O&M
     document.getElementById('open-om-modal-btn').addEventListener('click', () => {
         document.getElementById('om-form').reset();
         document.getElementById('om-modal').classList.remove('hidden');
@@ -1383,7 +1544,6 @@ function setupEventListeners() {
         document.getElementById('om-copy-modal').classList.add('hidden');
     });
     
-    // Listener para o botão de concluir O.S.
     document.getElementById('om-active-list').addEventListener('click', (e) => {
         const completeButton = e.target.closest('.complete-om-btn');
         if (completeButton) {
@@ -1394,8 +1554,21 @@ function setupEventListeners() {
             }
         }
     });
+    document.getElementById('om-search-input').addEventListener('input', filterAndRenderOMHistory);
+    document.getElementById('om-history-date-filter').addEventListener('change', filterAndRenderOMHistory);
 
-    // Admin Panel Listeners
+
+    // Mobile Menu
+    document.getElementById('hamburger-btn').addEventListener('click', () => {
+        sidebar.classList.toggle('-translate-x-full');
+        document.getElementById('mobile-menu-overlay').classList.toggle('hidden');
+    });
+    document.getElementById('mobile-menu-overlay').addEventListener('click', () => {
+        sidebar.classList.add('-translate-x-full');
+        document.getElementById('mobile-menu-overlay').classList.add('hidden');
+    });
+
+    // Admin Panel
     document.getElementById('add-user-button').addEventListener('click', async () => {
         const email = document.getElementById('new-user-email').value;
         const name = document.getElementById('new-user-name').value;

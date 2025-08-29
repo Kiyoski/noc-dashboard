@@ -47,17 +47,22 @@
     <div id="app-screen" class="hidden">
         <div class="flex min-h-screen">
             <!-- Sidebar (Menu Lateral) -->
-            <aside id="sidebar" class="w-64 bg-slate-800 text-slate-200 flex-col p-4 shadow-lg border-r border-slate-700 hidden md:flex">
+            <aside id="sidebar" class="w-64 bg-slate-800 text-slate-200 flex-col p-4 shadow-lg border-r border-slate-700 fixed md:relative h-full z-40 transition-transform -translate-x-full md:translate-x-0">
                 <!-- Conteúdo dinâmico -->
             </aside>
+            <!-- Overlay para menu mobile -->
+            <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden md:hidden"></div>
 
             <!-- Área de Conteúdo Principal -->
             <main id="main-content-area" class="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
                 <header class="mb-6">
                     <div class="flex justify-between items-center">
-                        <h1 id="page-title" class="text-3xl sm:text-4xl font-bold text-white">Início</h1>
                         <div class="flex items-center">
-                            <span class="text-lg text-slate-400 mr-4">Bem-vindo, <span id="user-name-display" class="font-semibold text-white"></span>!</span>
+                            <button id="hamburger-btn" class="md:hidden text-2xl text-white mr-4"><i class="fas fa-bars"></i></button>
+                            <h1 id="page-title" class="text-3xl sm:text-4xl font-bold text-white">Início</h1>
+                        </div>
+                        <div class="flex items-center">
+                            <span class="text-lg text-slate-400 mr-4 hidden sm:inline">Bem-vindo, <span id="user-name-display" class="font-semibold text-white"></span>!</span>
                             <button id="logout-button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow-md">Sair</button>
                         </div>
                     </div>
@@ -184,10 +189,50 @@
                             <i class="fas fa-plus mr-2"></i> Abrir Nova O.S.
                         </button>
                     </div>
-                    <div id="om-active-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <!-- Cards de O.S. em andamento serão inseridos aqui -->
+
+                    <div id="om-tabs-container" class="mb-8 flex border-b border-slate-700">
+                        <button data-om-subpage="om-active-section" class="om-subpage-btn px-4 py-2 font-bold rounded-t-lg -mb-px">Em Andamento</button>
+                        <button data-om-subpage="om-historic-section" class="om-subpage-btn px-4 py-2 font-bold rounded-t-lg">Histórico</button>
+                        <button data-om-subpage="om-metrics-section" class="om-subpage-btn px-4 py-2 font-bold rounded-t-lg">Métricas</button>
+                    </div>
+
+                    <div id="om-active-section" class="om-subpage">
+                        <div id="om-active-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <!-- Cards de O.S. em andamento -->
+                        </div>
+                    </div>
+                    
+                    <div id="om-historic-section" class="om-subpage hidden">
+                        <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700 mb-6">
+                            <h3 class="text-lg font-bold text-white mb-4">Filtrar Histórico</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <input type="text" id="om-search-input" placeholder="Buscar por cliente, motivo, protocolo..." class="md:col-span-2 bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                                <input type="date" id="om-history-date-filter" class="bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                            </div>
+                        </div>
+                        <div id="om-historic-list" class="space-y-4">
+                            <!-- Cards de O.S. concluídas -->
+                        </div>
+                    </div>
+
+                    <div id="om-metrics-section" class="om-subpage hidden">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                            <div class="p-4 bg-slate-800 rounded-lg shadow-lg text-center border border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-400"><i class="fas fa-check-double text-green-400 mr-2"></i>Total Concluídas (Período)</h3>
+                                <p id="om-total-concluidas" class="text-3xl font-bold text-white mt-2">0</p>
+                            </div>
+                            <div class="p-4 bg-slate-800 rounded-lg shadow-lg text-center border border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-400"><i class="fas fa-hourglass-half text-yellow-400 mr-2"></i>Tempo Médio de Conclusão</h3>
+                                <p id="om-avg-time" class="text-3xl font-bold text-white mt-2">0h 0m</p>
+                            </div>
+                        </div>
+                        <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
+                            <h2 class="text-xl font-bold text-center mb-4 text-white">Ordens de Serviço por Motivo (Período)</h2>
+                            <canvas id="om-reason-chart"></canvas>
+                        </div>
                     </div>
                 </section>
+
 
                 <section id="admin-panel" class="page-section hidden">
                     <div class="space-y-4">
@@ -359,11 +404,9 @@
         </div>
     </div>
     
-    <!-- NOVO MODAL O&M -->
     <div id="om-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
         <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 border border-slate-700 max-h-[90vh] overflow-y-auto">
             <h3 class="text-xl font-bold mb-6 text-white text-center">Abrir Nova Ordem de Serviço</h3>
-            <!-- CORREÇÃO: trocado div por form -->
             <form id="om-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="md:col-span-2">
                     <label for="om-motivo" class="block text-sm font-medium text-slate-300">Motivo</label>
@@ -413,7 +456,6 @@
         </div>
     </div>
     
-    <!-- NOVO MODAL DE CÓPIA O&M -->
     <div id="om-copy-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
         <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 border border-slate-700">
             <h3 class="text-xl font-bold mb-4 text-white text-center">O.S. Registrada com Sucesso!</h3>
@@ -425,7 +467,6 @@
             </div>
         </div>
     </div>
-
 
     <script type="module" src="js/main.js"></script>
 </body>
