@@ -51,6 +51,7 @@ let localFcrScores = {};
 let localReports = [];
 let localOMOrders = [];
 let localOMOrdersHistoric = [];
+let localOMOrdersScheduled = [];
 let modalContext = {};
 let agentEvolutionChart, categoryEvolutionChart, fcrVsEscalonadoChart, fcrEscalonadoTrendChart, omReasonChart;
 let currentAnalystName = '';
@@ -94,6 +95,7 @@ function setupUIForRole(role) {
         n1Dashboard: { title: 'Meus FCRs', icon: 'fa-user-check', roles: ['n1'], page: 'n1-dashboard-page' },
         dashboard: { title: 'Dashboard Geral', icon: 'fa-chart-line', roles: ['admin', 'viewer'], page: 'viewer-content' },
         om: { title: 'O&M', icon: 'fa-truck', roles: ['admin', 'viewer', 'input', 'n1'], page: 'om-page' },
+        approveFcr: { title: 'Aprovar FCRs', icon: 'fa-tasks', roles: ['admin'], page: 'approve-fcr-page'},
         register: { title: 'Registros', icon: 'fa-plus-circle', roles: ['admin', 'input', 'n1'], page: 'register-page' },
         reports: { title: 'Reports', icon: 'fa-file-alt', roles: ['admin', 'viewer', 'input', 'n1'], page: 'reports-page' },
         admin: { title: 'Admin', icon: 'fa-cogs', roles: ['admin'], page: 'admin-panel' }
@@ -342,6 +344,16 @@ function setupFirestoreListener() {
         localOMOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         renderActiveOMOrders(localOMOrders);
     }, (error) => console.error("Erro no listener de O&M (Ativas):", error));
+
+    // O&M - Agendadas
+    const omScheduledRef = query(collection(db, `/artifacts/${appId}/public/data/o_and_m_orders`), where("status", "==", "agendada"), orderBy("scheduledFor", "asc"));
+    onSnapshot(omScheduledRef, (querySnapshot) => {
+        localOMOrdersScheduled = [];
+        querySnapshot.forEach((doc) => {
+            localOMOrdersScheduled.push({ id: doc.id, ...doc.data() });
+        });
+        renderScheduledOMOrders(localOMOrdersScheduled);
+    }, (error) => console.error("Erro no listener de O&M (Agendadas):", error));
 
     // O&M - Histórico
     const omHistoricRef = query(collection(db, `/artifacts/${appId}/public/data/o_and_m_orders`), where("status", "==", "concluido"), orderBy("completedAt", "desc"), limit(100));
@@ -823,7 +835,8 @@ function openProtocolsModal(categoryName) {
 
 // --- FUNÇÕES DO PAINEL DE ADMIN ---
 function renderFcrApprovalPanel() {
-    const approvalList = document.getElementById('fcr-approval-list');
+    const approvalList = document.getElementById('fcr-approval-list-page');
+    if (!approvalList) return;
     approvalList.innerHTML = '';
     const pendingFcrs = [];
 
@@ -1170,12 +1183,55 @@ function renderActiveOMOrders(orders) {
             </div>
         `;
     }).join('');
-    updateSlaColors(); // Garante que as cores sejam aplicadas na renderização inicial
+    updateSlaColors();
+}
+
+function renderScheduledOMOrders(orders) {
+    const container = document.getElementById('om-scheduled-list');
+    if (!container) return;
+
+    if (orders.length === 0) {
+        container.innerHTML = '<p class="text-center text-slate-400 p-4 md:col-span-2 lg:col-span-3">Nenhuma Ordem de Serviço agendada.</p>';
+        return;
+    }
+
+    container.innerHTML = orders.map(order => {
+        const scheduledDate = new Date(order.scheduledFor + 'T00:00:00').toLocaleDateString('pt-BR');
+
+        return `
+            <div class="bg-slate-800 border border-slate-700 rounded-lg p-4 flex flex-col justify-between" data-order-id="${order.id}">
+                <div>
+                    <div class="flex justify-between items-start">
+                        <h4 class="font-bold text-lg text-indigo-400">${order.motivo}</h4>
+                        <span class="text-sm font-semibold bg-cyan-600 text-white px-2 py-1 rounded-md">Agendada</span>
+                    </div>
+                    <p class="text-sm text-slate-300 font-semibold">${order.cliente}</p>
+                     <p class="text-sm text-slate-400 font-semibold mt-1">Para: ${scheduledDate}</p>
+                    <hr class="my-2 border-slate-600">
+                    <p class="text-sm"><span class="font-semibold">PROTOCOLO NOC:</span> ${order.protocoloNoc}</p>
+                </div>
+                <div class="mt-4 flex justify-between items-center">
+                    <p class="text-xs text-slate-500">Criado por ${order.createdBy}</p>
+                    <button class="start-om-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg text-sm">
+                        <i class="fas fa-play-circle mr-1"></i> Iniciar Agora
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 
 async function saveOMOrder() {
     const form = document.getElementById('om-form');
+    const isScheduled = form.querySelector('#om-schedule-checkbox').checked;
+    const scheduledDate = form.querySelector('#om-schedule-date').value;
+
+    if (isScheduled && !scheduledDate) {
+        showStatusMessage('Selecione uma data para o agendamento.', 'error');
+        return;
+    }
+
     const data = {
         motivo: form.querySelector('#om-motivo').value.trim(),
         cliente: form.querySelector('#om-cliente').value.trim(),
@@ -1196,7 +1252,8 @@ async function saveOMOrder() {
 
     const newOrder = {
         ...data,
-        status: 'em_andamento',
+        status: isScheduled ? 'agendada' : 'em_andamento',
+        scheduledFor: isScheduled ? scheduledDate : null,
         createdAt: new Date().toISOString(),
         createdBy: currentAnalystName,
         completedAt: null,
@@ -1212,6 +1269,28 @@ async function saveOMOrder() {
         showStatusMessage(`Erro ao registrar O.S.: ${error.message}`, 'error');
     }
 }
+
+async function startOMOrder(orderId) {
+    const confirmed = await showConfirmationModal(
+        'Iniciar Ordem de Serviço',
+        'Deseja iniciar esta O.S. agora? Ela será movida para a lista "Em Andamento" e o SLA começará a contar.'
+    );
+
+    if(confirmed) {
+        const orderRef = doc(db, `/artifacts/${appId}/public/data/o_and_m_orders`, orderId);
+        try {
+            await updateDoc(orderRef, {
+                status: 'em_andamento',
+                createdAt: new Date().toISOString(), // Reinicia o tempo de criação para o SLA
+                scheduledFor: null
+            });
+            showStatusMessage('O.S. iniciada com sucesso!', 'success');
+        } catch (error) {
+             showStatusMessage(`Erro ao iniciar O.S.: ${error.message}`, 'error');
+        }
+    }
+}
+
 
 async function completeOMOrder(orderId) {
     const confirmed = await showConfirmationModal(
@@ -1310,7 +1389,7 @@ function filterAndRenderOMHistory() {
             order.motivo.toLowerCase().includes(searchTerm) ||
             order.cliente.toLowerCase().includes(searchTerm) ||
             order.protocoloNoc.toLowerCase().includes(searchTerm) ||
-            order.protocoloOem.toLowerCase().includes(searchTerm)
+            (order.protocoloOem && order.protocoloOem.toLowerCase().includes(searchTerm))
         );
     }
 
@@ -1533,6 +1612,7 @@ function setupEventListeners() {
     // O&M
     document.getElementById('open-om-modal-btn').addEventListener('click', () => {
         document.getElementById('om-form').reset();
+        document.getElementById('om-schedule-date-container').classList.add('hidden');
         document.getElementById('om-modal').classList.remove('hidden');
     });
     document.getElementById('om-modal-cancel-btn').addEventListener('click', () => {
@@ -1542,6 +1622,9 @@ function setupEventListeners() {
     document.getElementById('om-copy-btn').addEventListener('click', copyOMText);
     document.getElementById('om-copy-modal-close-btn').addEventListener('click', () => {
         document.getElementById('om-copy-modal').classList.add('hidden');
+    });
+    document.getElementById('om-schedule-checkbox').addEventListener('change', (e) => {
+        document.getElementById('om-schedule-date-container').classList.toggle('hidden', !e.target.checked);
     });
     
     document.getElementById('om-active-list').addEventListener('click', (e) => {
@@ -1554,6 +1637,18 @@ function setupEventListeners() {
             }
         }
     });
+
+    document.getElementById('om-scheduled-list').addEventListener('click', (e) => {
+        const startButton = e.target.closest('.start-om-btn');
+        if (startButton) {
+            const card = e.target.closest('[data-order-id]');
+            const orderId = card.dataset.orderId;
+            if (orderId) {
+                startOMOrder(orderId);
+            }
+        }
+    });
+    
     document.getElementById('om-search-input').addEventListener('input', filterAndRenderOMHistory);
     document.getElementById('om-history-date-filter').addEventListener('change', filterAndRenderOMHistory);
 

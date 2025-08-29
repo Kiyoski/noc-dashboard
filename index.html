@@ -170,6 +170,13 @@
                     </div>
                 </section>
 
+                <section id="approve-fcr-page" class="page-section hidden">
+                    <h2 class="text-2xl font-bold mb-4 text-white">Aprovar FCRs Pendentes</h2>
+                    <div id="fcr-approval-list-page" class="space-y-3 max-h-[70vh] overflow-y-auto bg-slate-800 p-4 rounded-lg shadow-lg border border-slate-700">
+                        <!-- Conteúdo gerado por JS -->
+                    </div>
+                </section>
+
                 <section id="reports-page" class="page-section hidden">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-2xl font-bold text-white">Reports Registrados</h2>
@@ -197,8 +204,14 @@
                     </div>
 
                     <div id="om-active-section" class="om-subpage">
+                        <h3 class="text-xl font-bold text-white mb-4">Em Andamento</h3>
                         <div id="om-active-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <!-- Cards de O.S. em andamento -->
+                        </div>
+
+                        <h3 class="text-xl font-bold text-white mb-4 mt-8">Agendadas</h3>
+                        <div id="om-scheduled-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <!-- Cards de O.S. agendadas -->
                         </div>
                     </div>
                     
@@ -293,18 +306,7 @@
                                 </div>
                             </div>
                         </div>
-                        <!-- Acordeão Item 4: Aprovar FCRs -->
-                        <div class="accordion-item">
-                            <button class="accordion-header">
-                                <span><i class="fas fa-tasks mr-2"></i> Aprovar FCRs Pendentes</span>
-                                <i class="fas fa-chevron-down transition-transform"></i>
-                            </button>
-                            <div class="accordion-content">
-                                <div id="fcr-approval-list" class="space-y-3 max-h-96 overflow-y-auto">
-                                    <!-- Conteúdo gerado por JS -->
-                                </div>
-                            </div>
-                        </div>
+                        
                         <!-- Acordeão Item 5: Associar Usuários -->
                         <div class="accordion-item">
                             <button class="accordion-header">
@@ -447,6 +449,16 @@
                 <div class="md:col-span-2">
                     <label for="om-obs" class="block text-sm font-medium text-slate-300">OBS</label>
                     <textarea id="om-obs" rows="3" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"></textarea>
+                </div>
+                <div class="md:col-span-2 space-y-2">
+                    <div class="flex items-center">
+                        <input type="checkbox" id="om-schedule-checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                        <label for="om-schedule-checkbox" class="ml-2 block text-sm text-slate-300">Agendar para outra data?</label>
+                    </div>
+                    <div id="om-schedule-date-container" class="hidden">
+                        <label for="om-schedule-date" class="block text-sm font-medium text-slate-300">Data do Agendamento</label>
+                        <input type="date" id="om-schedule-date" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                    </div>
                 </div>
             </form>
             <div class="mt-6 flex justify-end space-x-4">
