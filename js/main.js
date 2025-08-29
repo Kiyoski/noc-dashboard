@@ -170,6 +170,42 @@ function showOMSubPage(subpageId) {
     });
 }
 
+function toggleTheme() {
+    const html = document.documentElement;
+    html.classList.toggle('dark');
+    html.classList.toggle('light');
+
+    const isDarkMode = html.classList.contains('dark');
+    localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+
+    const icon = document.querySelector('#theme-toggle-btn i');
+    if (isDarkMode) {
+        icon.classList.remove('fa-moon');
+        icon.classList.add('fa-sun');
+    } else {
+        icon.classList.remove('fa-sun');
+        icon.classList.add('fa-moon');
+    }
+}
+
+function applyInitialTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    const html = document.documentElement;
+    
+    html.classList.remove('dark', 'light');
+    html.classList.add(savedTheme);
+
+    const icon = document.querySelector('#theme-toggle-btn i');
+    if (savedTheme === 'dark') {
+        icon.classList.remove('fa-moon');
+        icon.classList.add('fa-sun');
+    } else {
+        icon.classList.remove('fa-sun');
+        icon.classList.add('fa-moon');
+    }
+}
+
+
 // --- FUNÇÕES DE UTILIDADE ---
 function showStatusMessage(message, type) {
     statusMessageEl.textContent = message;
@@ -216,6 +252,8 @@ async function main() {
         db = getFirestore(app);
         auth = getAuth(app);
         storage = getStorage(app);
+        
+        applyInitialTheme();
         
         onAuthStateChanged(auth, async (user) => {
             if (user) {
@@ -326,7 +364,7 @@ function setupFirestoreListener() {
         querySnapshot.forEach((doc) => {
             const data = doc.data();
             if (data && data.date) {
-                localReports.push({ id: doc.id, ...data });
+                localReports.push({ id: doc.id, ...doc.data() });
             }
         });
         localReports.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -1217,24 +1255,24 @@ function renderActiveOMOrders(orders) {
         }
 
         return `
-            <div class="om-card bg-slate-800 border-2 rounded-lg p-4 flex flex-col justify-between" data-order-id="${order.id}" data-created-at="${order.createdAt}" data-appropriated-at="${order.appropriatedAt || ''}">
+            <div class="om-card bg-slate-800 border-2 rounded-lg p-4 flex flex-col justify-between cursor-pointer" data-order-id="${order.id}" data-order-type="active" data-created-at="${order.createdAt}" data-appropriated-at="${order.appropriatedAt || ''}">
                 <div>
                     <div class="flex justify-between items-start">
-                        <h4 class="font-bold text-lg text-indigo-400">${order.motivo}</h4>
+                        <h4 class="font-bold text-lg text-indigo-400 pointer-events-none">${order.motivo}</h4>
                         <div id="sla-30min-warning-${order.id}" class="hidden items-center text-red-400 animate-pulse">
                             <i class="fas fa-exclamation-triangle mr-2"></i>
                             <span class="font-bold text-sm">SLA 30min</span>
                         </div>
                     </div>
-                    <p class="text-sm text-slate-300 font-semibold">${order.cliente}</p>
-                    <p class="text-xs text-slate-400">${order.endereco}</p>
-                    <hr class="my-2 border-slate-600">
-                    <p class="text-sm"><span class="font-semibold">PROTOCOLO NOC:</span> ${order.protocoloNoc}</p>
-                    <p class="text-sm"><span class="font-semibold">PROTOCOLO OEM:</span> ${order.protocoloOem}</p>
+                    <p class="text-sm text-slate-300 font-semibold pointer-events-none">${order.cliente}</p>
+                    <p class="text-xs text-slate-400 pointer-events-none">${order.endereco}</p>
+                    <hr class="my-2 border-slate-600 pointer-events-none">
+                    <p class="text-sm pointer-events-none"><span class="font-semibold">PROTOCOLO NOC:</span> ${order.protocoloNoc}</p>
+                    <p class="text-sm pointer-events-none"><span class="font-semibold">PROTOCOLO OEM:</span> ${order.protocoloOem}</p>
                     ${appropriationHtml}
                 </div>
                 <div class="mt-4 flex justify-between items-center">
-                    <p class="text-xs text-slate-500">Aberto por ${order.createdBy}<br>em ${formattedDate}</p>
+                    <p class="text-xs text-slate-500 pointer-events-none">Aberto por ${order.createdBy}<br>em ${formattedDate}</p>
                     <button class="complete-om-btn bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-lg text-sm">
                         <i class="fas fa-check-circle mr-1"></i> Marcar como Concluída
                     </button>
@@ -1258,19 +1296,19 @@ function renderScheduledOMOrders(orders) {
         const scheduledDate = new Date(order.scheduledFor + 'T00:00:00').toLocaleDateString('pt-BR');
 
         return `
-            <div class="bg-slate-800 border border-slate-700 rounded-lg p-4 flex flex-col justify-between" data-order-id="${order.id}">
+            <div class="bg-slate-800 border border-slate-700 rounded-lg p-4 flex flex-col justify-between cursor-pointer" data-order-id="${order.id}" data-order-type="scheduled">
                 <div>
-                    <div class="flex justify-between items-start">
+                    <div class="flex justify-between items-start pointer-events-none">
                         <h4 class="font-bold text-lg text-indigo-400">${order.motivo}</h4>
                         <span class="text-sm font-semibold bg-cyan-600 text-white px-2 py-1 rounded-md">Agendada</span>
                     </div>
-                    <p class="text-sm text-slate-300 font-semibold">${order.cliente}</p>
-                     <p class="text-sm text-slate-400 font-semibold mt-1">Para: ${scheduledDate}</p>
-                    <hr class="my-2 border-slate-600">
-                    <p class="text-sm"><span class="font-semibold">PROTOCOLO NOC:</span> ${order.protocoloNoc}</p>
+                    <p class="text-sm text-slate-300 font-semibold pointer-events-none">${order.cliente}</p>
+                     <p class="text-sm text-slate-400 font-semibold mt-1 pointer-events-none">Para: ${scheduledDate}</p>
+                    <hr class="my-2 border-slate-600 pointer-events-none">
+                    <p class="text-sm pointer-events-none"><span class="font-semibold">PROTOCOLO NOC:</span> ${order.protocoloNoc}</p>
                 </div>
                 <div class="mt-4 flex justify-between items-center">
-                    <p class="text-xs text-slate-500">Criado por ${order.createdBy}</p>
+                    <p class="text-xs text-slate-500 pointer-events-none">Criado por ${order.createdBy}</p>
                     <button class="start-om-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg text-sm">
                         <i class="fas fa-play-circle mr-1"></i> Iniciar Agora
                     </button>
@@ -1320,7 +1358,8 @@ async function saveOMOrder() {
         manualCompletedAt: null,
         appropriatedBy: null,
         appropriatedById: null,
-        appropriatedAt: null
+        appropriatedAt: null,
+        comments: []
     };
     
     try {
@@ -1580,14 +1619,14 @@ function renderHistoricOMOrders(orders) {
 
     container.innerHTML = orders.map(order => {
         const createdAt = new Date(order.createdAt);
-        const completedAt = new Date(order.completedAt);
+        const completedAt = new Date(order.manualCompletedAt || order.completedAt);
         const durationMs = completedAt.getTime() - createdAt.getTime();
         const durationHours = Math.floor(durationMs / 3600000);
         const durationMinutes = Math.round((durationMs % 3600000) / 60000);
         
         return `
-            <div class="bg-slate-800 border border-slate-700 rounded-lg p-4">
-                <div class="flex justify-between items-start">
+            <div class="bg-slate-800 border border-slate-700 rounded-lg p-4 cursor-pointer" data-order-id="${order.id}" data-order-type="historic">
+                <div class="flex justify-between items-start pointer-events-none">
                     <div>
                         <h4 class="font-bold text-lg text-indigo-400">${order.motivo}</h4>
                         <p class="text-sm text-slate-300 font-semibold">${order.cliente}</p>
@@ -1597,9 +1636,9 @@ function renderHistoricOMOrders(orders) {
                          <p class="text-xs text-slate-400">em ${completedAt.toLocaleDateString('pt-BR')}</p>
                     </div>
                 </div>
-                <hr class="my-2 border-slate-600">
-                <p class="text-sm"><span class="font-semibold">PROTOCOLO NOC:</span> ${order.protocoloNoc}</p>
-                 <div class="text-xs text-slate-500 mt-3 flex justify-between">
+                <hr class="my-2 border-slate-600 pointer-events-none">
+                <p class="text-sm pointer-events-none"><span class="font-semibold">PROTOCOLO NOC:</span> ${order.protocoloNoc}</p>
+                 <div class="text-xs text-slate-500 mt-3 flex justify-between pointer-events-none">
                     <span>Aberto por: ${order.createdBy}</span>
                     <span>Fechado por: ${order.completedBy}</span>
                     <span>Duração: ${durationHours}h ${durationMinutes}m</span>
@@ -1732,6 +1771,90 @@ async function markNotificationAsRead(notificationId) {
     }
 }
 
+function openOMDetailsModal(order) {
+    const modal = document.getElementById('om-details-modal');
+    const contentEl = document.getElementById('om-details-modal-content');
+    const commentsListEl = document.getElementById('om-details-comments-list');
+    const addCommentBtn = document.getElementById('om-add-comment-btn');
+
+    addCommentBtn.dataset.orderId = order.id;
+
+    const dateOptions = { year: 'numeric', month: '2-digit', day: '2-digit' };
+    const timeOptions = { hour: '2-digit', minute: '2-digit' };
+    
+    const createdAt = new Date(order.createdAt);
+    const createdAtDate = createdAt.toLocaleDateString('pt-BR', dateOptions);
+    const createdAtTime = createdAt.toLocaleTimeString('pt-BR', timeOptions);
+
+    let completedHtml = '<span class="font-semibold text-amber-400">Em Andamento</span>';
+    if(order.status === 'concluido') {
+        const completedAt = new Date(order.manualCompletedAt || order.completedAt);
+        completedHtml = `<span class="font-semibold text-green-400">Concluída em ${completedAt.toLocaleDateString('pt-BR', dateOptions)} às ${completedAt.toLocaleTimeString('pt-BR', timeOptions)}</span>`;
+    } else if (order.status === 'agendada') {
+         completedHtml = `<span class="font-semibold text-cyan-400">Agendada para ${new Date(order.scheduledFor + 'T00:00:00').toLocaleDateString('pt-BR', dateOptions)}</span>`;
+    }
+
+    contentEl.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-slate-700/50 p-3 rounded-lg"><p class="text-sm text-slate-400">Motivo</p><p class="font-semibold text-white">${order.motivo}</p></div>
+            <div class="bg-slate-700/50 p-3 rounded-lg"><p class="text-sm text-slate-400">Cliente</p><p class="font-semibold text-white">${order.cliente}</p></div>
+            <div class="bg-slate-700/50 p-3 rounded-lg md:col-span-2"><p class="text-sm text-slate-400">Endereço</p><p class="font-semibold text-white">${order.endereco}</p></div>
+            <div class="bg-slate-700/50 p-3 rounded-lg"><p class="text-sm text-slate-400">Protocolo NOC</p><p class="font-semibold text-white">${order.protocoloNoc}</p></div>
+            <div class="bg-slate-700/50 p-3 rounded-lg"><p class="text-sm text-slate-400">Protocolo OEM</p><p class="font-semibold text-white">${order.protocoloOem || 'N/A'}</p></div>
+            <div class="bg-slate-700/50 p-3 rounded-lg md:col-span-2"><p class="text-sm text-slate-400">Observações</p><p class="font-semibold text-white">${order.obs || 'Nenhuma.'}</p></div>
+            <div class="bg-slate-700/50 p-3 rounded-lg"><p class="text-sm text-slate-400">Criado por</p><p class="font-semibold text-white">${order.createdBy} em ${createdAtDate} às ${createdAtTime}</p></div>
+            <div class="bg-slate-700/50 p-3 rounded-lg"><p class="text-sm text-slate-400">Status</p>${completedHtml}</div>
+        </div>
+    `;
+
+    commentsListEl.innerHTML = '<p class="text-slate-400 text-sm">Carregando comentários...</p>';
+    if (order.comments && order.comments.length > 0) {
+        commentsListEl.innerHTML = order.comments.map(c => {
+            const commentDate = new Date(c.createdAt);
+            return `<div class="p-2 bg-slate-800 rounded-md"><p class="text-sm text-white">${c.text}</p><p class="text-xs text-slate-500 text-right">-- ${c.author} em ${commentDate.toLocaleDateString('pt-BR')} ${commentDate.toLocaleTimeString('pt-BR', timeOptions)}</p></div>`;
+        }).join('');
+    } else {
+        commentsListEl.innerHTML = '<p class="text-slate-400 text-center text-sm p-4">Nenhum comentário ainda.</p>';
+    }
+
+    modal.classList.remove('hidden');
+}
+
+async function addOMComment(orderId, commentText) {
+    if (!commentText.trim()) return;
+
+    const orderRef = doc(db, `/artifacts/${appId}/public/data/o_and_m_orders`, orderId);
+    const newComment = {
+        text: commentText,
+        author: currentAnalystName,
+        createdAt: new Date().toISOString()
+    };
+    
+    try {
+        await updateDoc(orderRef, {
+            comments: arrayUnion(newComment)
+        });
+        
+        // CORREÇÃO: Apenas manipula o DOM, sem alterar os dados locais para evitar duplicatas.
+        const commentsListEl = document.getElementById('om-details-comments-list');
+        const noCommentsEl = commentsListEl.querySelector('p.text-center');
+        if (noCommentsEl) {
+            noCommentsEl.remove();
+        }
+        
+        const commentDate = new Date(newComment.createdAt);
+        const timeOptions = { hour: '2-digit', minute: '2-digit' };
+        const commentEl = document.createElement('div');
+        commentEl.className = 'p-2 bg-slate-800 rounded-md';
+        commentEl.innerHTML = `<p class="text-sm text-white">${newComment.text}</p><p class="text-xs text-slate-500 text-right">-- ${newComment.author} em ${commentDate.toLocaleDateString('pt-BR')} ${commentDate.toLocaleTimeString('pt-BR', timeOptions)}</p>`;
+        commentsListEl.appendChild(commentEl);
+        commentsListEl.scrollTop = commentsListEl.scrollHeight;
+
+    } catch(error) {
+        console.error("Erro ao adicionar comentário:", error);
+        showStatusMessage("Erro ao adicionar comentário.", "error");
+    }
+}
 
 // --- EVENT LISTENERS ---
 function setupEventListeners() {
@@ -1848,21 +1971,36 @@ function setupEventListeners() {
         document.getElementById('om-schedule-date-container').classList.toggle('hidden', !e.target.checked);
     });
     
+    const omCardClickHandler = (e) => {
+        if (e.target.closest('button, a')) return;
+        const card = e.target.closest('[data-order-id]');
+        if (!card) return;
+
+        const orderId = card.dataset.orderId;
+        const orderType = card.dataset.orderType;
+
+        let orderData;
+        if (orderType === 'active') orderData = localOMOrders.find(o => o.id === orderId);
+        else if (orderType === 'scheduled') orderData = localOMOrdersScheduled.find(o => o.id === orderId);
+        else if (orderType === 'historic') orderData = localOMOrdersHistoric.find(o => o.id === orderId);
+
+        if (orderData) openOMDetailsModal(orderData);
+    };
+
     document.getElementById('om-active-list').addEventListener('click', (e) => {
+        omCardClickHandler(e);
         const completeButton = e.target.closest('.complete-om-btn');
         if (completeButton) {
             const card = e.target.closest('.om-card');
             const orderId = card.dataset.orderId;
             if (orderId) openCompleteOMModal(orderId);
         }
-
         const appropriateButton = e.target.closest('.appropriate-om-btn');
         if (appropriateButton) {
             const card = e.target.closest('.om-card');
             const orderId = card.dataset.orderId;
             if (orderId) appropriateOMOrder(orderId);
         }
-
         const releaseButton = e.target.closest('.release-om-btn');
         if (releaseButton) {
             const card = e.target.closest('.om-card');
@@ -1870,29 +2008,36 @@ function setupEventListeners() {
             if (orderId) releaseOMOrder(orderId);
         }
     });
+    document.getElementById('om-scheduled-list').addEventListener('click', (e) => {
+        omCardClickHandler(e);
+        const startButton = e.target.closest('.start-om-btn');
+        if (startButton) {
+            const card = e.target.closest('[data-order-id]');
+            const orderId = card.dataset.orderId;
+            if (orderId) startOMOrder(orderId);
+        }
+    });
+    document.getElementById('om-historic-list').addEventListener('click', omCardClickHandler);
+
 
     document.getElementById('complete-om-modal-cancel-btn').addEventListener('click', () => {
         document.getElementById('complete-om-modal').classList.add('hidden');
     });
     document.getElementById('complete-om-modal-confirm-btn').addEventListener('click', completeOMOrder);
 
-    document.getElementById('om-scheduled-list').addEventListener('click', (e) => {
-        const startButton = e.target.closest('.start-om-btn');
-        if (startButton) {
-            const card = e.target.closest('[data-order-id]');
-            const orderId = card.dataset.orderId;
-            if (orderId) {
-                startOMOrder(orderId);
-            }
-        }
-    });
-    
     document.getElementById('om-search-input').addEventListener('input', filterAndRenderOMHistory);
     document.getElementById('om-history-date-filter').addEventListener('change', filterAndRenderOMHistory);
     document.getElementById('om-metrics-filter-btn').addEventListener('click', () => renderOMMetrics(true));
+    document.getElementById('om-details-modal-close-btn').addEventListener('click', () => document.getElementById('om-details-modal').classList.add('hidden'));
+    document.getElementById('om-add-comment-btn').addEventListener('click', (e) => {
+        const orderId = e.target.dataset.orderId;
+        const commentInput = document.getElementById('om-new-comment-input');
+        addOMComment(orderId, commentInput.value);
+        commentInput.value = '';
+    });
 
 
-    // Mobile Menu
+    // Mobile Menu & Theme
     document.getElementById('hamburger-btn').addEventListener('click', () => {
         sidebar.classList.toggle('-translate-x-full');
         document.getElementById('mobile-menu-overlay').classList.toggle('hidden');
@@ -1901,6 +2046,7 @@ function setupEventListeners() {
         sidebar.classList.add('-translate-x-full');
         document.getElementById('mobile-menu-overlay').classList.add('hidden');
     });
+    document.getElementById('theme-toggle-btn').addEventListener('click', toggleTheme);
 
     // Notificações
     document.getElementById('notification-bell').addEventListener('click', () => {
@@ -1916,6 +2062,10 @@ function setupEventListeners() {
             document.getElementById('notification-panel').classList.add('hidden');
         }
     });
+
+    // CSV Exports
+    document.getElementById('export-summary-csv-btn').addEventListener('click', exportSummaryToCSV);
+    document.getElementById('export-om-csv-btn').addEventListener('click', exportOMMetricsToCSV);
 
 
     // Admin Panel
@@ -2052,6 +2202,84 @@ function setupEventListeners() {
 
     document.getElementById('associate-button').addEventListener('click', associateUserToPerson);
 }
+
+// --- CSV Export Functions ---
+function exportOMMetricsToCSV() {
+    let startDateStr = document.getElementById('om-metrics-start-date').value;
+    let endDateStr = document.getElementById('om-metrics-end-date').value;
+    
+    let ordersToExport = localOMOrdersHistoric;
+    if (startDateStr && endDateStr) {
+        ordersToExport = filterOMsByPeriod(localOMOrdersHistoric, startDateStr, endDateStr);
+    }
+
+    if (ordersToExport.length === 0) {
+        showStatusMessage("Não há dados para exportar no período selecionado.", "error");
+        return;
+    }
+
+    const headers = ["Motivo", "Cliente", "Protocolo NOC", "Criado Por", "Concluído Por", "Data de Criação", "Data de Conclusão", "Duração (min)"];
+    const rows = ordersToExport.map(o => {
+        const createdAt = new Date(o.createdAt);
+        const completedAt = new Date(o.manualCompletedAt || o.completedAt);
+        const durationMin = Math.round((completedAt - createdAt) / 60000);
+        return [
+            o.motivo.replace(/,/g, ''),
+            o.cliente.replace(/,/g, ''),
+            o.protocoloNoc,
+            o.createdBy,
+            o.completedBy,
+            createdAt.toLocaleString('pt-BR'),
+            completedAt.toLocaleString('pt-BR'),
+            durationMin
+        ].join(',');
+    });
+
+    downloadCSV([headers.join(','), ...rows].join('\n'), 'metricas_om.csv');
+}
+
+function exportSummaryToCSV() {
+     const startDate = document.getElementById('start-date-filter').value;
+    const endDate = document.getElementById('end-date-filter').value;
+
+    const filteredScores = filterScoresByPeriod(localScores, startDate, endDate);
+    
+    if (Object.keys(filteredScores).length === 0) {
+        showStatusMessage("Não há dados para exportar no período selecionado.", "error");
+        return;
+    }
+
+    const headers = ["Pessoa", "Categoria", "Quantidade"];
+    const rows = [];
+    
+    people.forEach(person => {
+        const personName = person.name;
+        const personData = filteredScores[personName] || {};
+        categories.forEach(category => {
+            const count = (personData[category.name] || []).length;
+            if (count > 0) {
+                rows.push([personName, category.name, count].join(','));
+            }
+        });
+    });
+
+    downloadCSV([headers.join(','), ...rows].join('\n'), 'resumo_dashboard.csv');
+}
+
+function downloadCSV(csvContent, fileName) {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+}
+
 
 // --- INICIAR APLICAÇÃO ---
 setupEventListeners();
