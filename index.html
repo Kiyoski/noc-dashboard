@@ -169,7 +169,7 @@
                         <section class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                             <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-4 text-white">Evolução por Agente (12 Meses)</h2><canvas id="agent-evolution-chart"></canvas></div>
                             <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-2 text-white">Evolução por Categoria (12 Meses)</h2><select id="category-chart-selector" class="block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3 mb-4"></select><canvas id="category-evolution-chart"></canvas></div>
-                            <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-2 text-white">Desempenho: FCR vs Escalonados vs Reports</h2><select id="fcr-vs-escalation-selector" class="block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3 mb-4"></select><canvas id="fcr-vs-escalonado-chart"></canvas></div>
+                            <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-2 text-white">Desempenho Geral</h2><select id="fcr-vs-escalation-selector" class="block w-full bg-slate-700 border-slate-600 text-white rounded-md shadow-sm py-2 px-3 mb-4"></select><canvas id="fcr-vs-escalonado-chart"></canvas></div>
                             <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700"><h2 class="text-xl font-bold text-center mb-4 text-white">Tendência FCR vs. Escalonados (12 Meses)</h2><canvas id="fcr-escalonado-trend-chart"></canvas></div>
                         </section>
                     </div>
@@ -244,23 +244,44 @@
                     </div>
 
                     <div id="om-metrics-section" class="om-subpage hidden">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700 mb-6">
+                            <h3 class="text-lg font-bold text-white mb-4">Filtrar Período das Métricas</h3>
+                            <div class="flex flex-wrap items-end gap-4">
+                                <div>
+                                    <label for="om-metrics-start-date" class="block text-sm font-medium text-slate-300">Data de Início</label>
+                                    <input type="date" id="om-metrics-start-date" class="mt-1 bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                                </div>
+                                <div>
+                                    <label for="om-metrics-end-date" class="block text-sm font-medium text-slate-300">Data Final</label>
+                                    <input type="date" id="om-metrics-end-date" class="mt-1 bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                                </div>
+                                <button id="om-metrics-filter-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">Filtrar Métricas</button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                             <div class="p-4 bg-slate-800 rounded-lg shadow-lg text-center border border-slate-700">
-                                <h3 class="text-lg font-semibold text-slate-400"><i class="fas fa-check-double text-green-400 mr-2"></i>Total Concluídas (Período)</h3>
+                                <h3 class="text-lg font-semibold text-slate-400"><i class="fas fa-check-double text-green-400 mr-2"></i>Total Concluídas</h3>
                                 <p id="om-total-concluidas" class="text-3xl font-bold text-white mt-2">0</p>
                             </div>
                             <div class="p-4 bg-slate-800 rounded-lg shadow-lg text-center border border-slate-700">
-                                <h3 class="text-lg font-semibold text-slate-400"><i class="fas fa-hourglass-half text-yellow-400 mr-2"></i>Tempo Médio de Conclusão</h3>
+                                <h3 class="text-lg font-semibold text-slate-400"><i class="fas fa-hourglass-half text-yellow-400 mr-2"></i>Tempo Médio Conclusão</h3>
                                 <p id="om-avg-time" class="text-3xl font-bold text-white mt-2">0h 0m</p>
+                            </div>
+                            <div class="p-4 bg-slate-800 rounded-lg shadow-lg text-center border border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-400"><i class="fas fa-user-clock text-amber-400 mr-2"></i>Atrasos de Tratativa</h3>
+                                <p id="om-sla-30min-delays" class="text-3xl font-bold text-white mt-2">0</p>
+                            </div>
+                             <div class="p-4 bg-slate-800 rounded-lg shadow-lg text-center border border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-400"><i class="fas fa-calendar-times text-red-400 mr-2"></i>Atrasos de Conclusão</h3>
+                                <p id="om-sla-4h-delays" class="text-3xl font-bold text-white mt-2">0</p>
                             </div>
                         </div>
                         <div class="p-4 bg-slate-800 rounded-lg shadow-lg border border-slate-700">
-                            <h2 class="text-xl font-bold text-center mb-4 text-white">Ordens de Serviço por Motivo (Período)</h2>
+                            <h2 class="text-xl font-bold text-center mb-4 text-white">Ordens de Serviço por Motivo</h2>
                             <canvas id="om-reason-chart"></canvas>
                         </div>
                     </div>
                 </section>
-
 
                 <section id="admin-panel" class="page-section hidden">
                     <div class="space-y-4">
@@ -425,7 +446,11 @@
         <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4 border border-slate-700 max-h-[90vh] overflow-y-auto">
             <h3 class="text-xl font-bold mb-6 text-white text-center">Abrir Nova Ordem de Serviço</h3>
             <form id="om-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="md:col-span-2">
+                <div>
+                    <label for="om-person-selector" class="block text-sm font-medium text-slate-300">Associar à Pessoa (para Ranking)</label>
+                    <select id="om-person-selector" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"></select>
+                </div>
+                <div>
                     <label for="om-motivo" class="block text-sm font-medium text-slate-300">Motivo</label>
                     <input type="text" id="om-motivo" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
                 </div>
@@ -495,7 +520,6 @@
         </div>
     </div>
 
-    <!-- NOVO MODAL: Concluir O&M com data/hora manual -->
     <div id="complete-om-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
         <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 border border-slate-700">
             <h3 class="text-xl font-bold mb-4 text-white">Concluir Ordem de Serviço</h3>

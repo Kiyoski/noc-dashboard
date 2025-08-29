@@ -421,16 +421,17 @@ function filterAndRenderAll() {
     const filteredScores = filterScoresByPeriod(localScores, startDate, endDate);
     const filteredFcrScores = filterScoresByPeriod(localFcrScores, startDate, endDate);
     const filteredReports = filterReportsByPeriod(localReports, startDate, endDate);
+    const filteredOMs = filterOMsByPeriod(localOMOrdersHistoric, startDate, endDate);
     
     const weights = calculateAllWeights(filteredScores);
-    updateTotals(filteredScores, filteredFcrScores);
+    updateTotals(filteredScores, filteredFcrScores, filteredOMs);
     renderIndividualDashboard(filteredScores, weights);
     renderWeightRanking(weights);
     renderAgentEvolutionChart(localScores);
     renderCategoryEvolutionChart(localScores);
-    renderFcrVsEscalonadoChart(filteredScores, filteredFcrScores, filteredReports);
+    renderFcrVsEscalonadoChart(filteredScores, filteredFcrScores, filteredReports, filteredOMs);
     renderFcrEscalonadoTrendChart(localScores, localFcrScores);
-    renderOMMetrics();
+    renderOMMetrics(false); // Renderiza com filtro global
 }
 
 function filterScoresByPeriod(scores, startDateStr, endDateStr) {
@@ -475,6 +476,23 @@ function filterReportsByPeriod(reports, startDateStr, endDateStr) {
     });
 }
 
+function filterOMsByPeriod(orders, startDateStr, endDateStr) {
+    if (!startDateStr || !endDateStr) return orders;
+
+    const startNum = parseInt(startDateStr.replace(/-/g, ''), 10);
+    const endNum = parseInt(endDateStr.replace(/-/g, ''), 10);
+
+    return orders.filter(order => {
+        if (order && order.completedAt) {
+            const completedDateStr = order.manualCompletedAt ? order.manualCompletedAt.substring(0, 10) : order.completedAt.substring(0, 10);
+            const entryNum = parseInt(completedDateStr.replace(/-/g, ''), 10);
+            return entryNum >= startNum && entryNum <= endNum;
+        }
+        return false;
+    });
+}
+
+
 function calculateAllWeights(filteredScores) {
     const personWeights = {};
     people.forEach(personObj => {
@@ -492,7 +510,7 @@ function calculateAllWeights(filteredScores) {
 
 function populateSelectors() {
     const personOptions = '<option value="">-- Selecione Pessoa --</option>' + people.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
-    ['person-selector', 'register-person-selector', 'register-fcr-person-selector', 'remove-person-selector', 'fcr-vs-escalation-selector'].forEach(id => {
+    ['person-selector', 'register-person-selector', 'register-fcr-person-selector', 'remove-person-selector', 'fcr-vs-escalation-selector', 'om-person-selector'].forEach(id => {
         document.getElementById(id).innerHTML = personOptions;
     });
     
@@ -519,7 +537,7 @@ function createTotalsGrid() {
     });
 }
 
-function updateTotals(filteredScores, filteredFcrScores) {
+function updateTotals(filteredScores, filteredFcrScores, filteredOMs) {
     let maxScore = -1;
     let leadingCategories = [];
     categories.forEach(category => {
@@ -544,7 +562,7 @@ function updateTotals(filteredScores, filteredFcrScores) {
             }
         });
     });
-    document.getElementById('total-protocols-value').textContent = totalEscalonamentos + totalFCR;
+    document.getElementById('total-protocols-value').textContent = totalEscalonamentos + totalFCR + filteredOMs.length;
 }
 
 function renderIndividualDashboard(filteredScores, weights) {
@@ -687,7 +705,7 @@ function renderCategoryEvolutionChart(scores) {
     categoryEvolutionChart = new Chart(ctx, { type: 'line', data: { labels, datasets: [dataset] } });
 }
 
-function renderFcrVsEscalonadoChart(filteredEscalonamentos, filteredFCR, filteredReports) {
+function renderFcrVsEscalonadoChart(filteredEscalonamentos, filteredFCR, filteredReports, filteredOMs) {
     const selectedPerson = document.getElementById('fcr-vs-escalation-selector').value;
     const ctx = document.getElementById('fcr-vs-escalonado-chart').getContext('2d');
     if (!ctx) return;
@@ -705,13 +723,14 @@ function renderFcrVsEscalonadoChart(filteredEscalonamentos, filteredFCR, filtere
     });
 
     const reportsCount = filteredReports.filter(r => r.personName === selectedPerson).length;
+    const omCount = filteredOMs.filter(o => o.personName === selectedPerson).length;
 
     const data = {
-        labels: ['Escalonados', 'FCR (Aprovados)', 'Reports'],
+        labels: ['Escalonados', 'FCR (Aprovados)', 'Reports', 'O.S. Concluídas'],
         datasets: [{
             label: `Registros de ${selectedPerson}`,
-            data: [escalonamentosCount, fcrCount, reportsCount],
-            backgroundColor: ['#F87171', '#4ADE80', '#60A5FA'],
+            data: [escalonamentosCount, fcrCount, reportsCount, omCount],
+            backgroundColor: ['#F87171', '#4ADE80', '#60A5FA', '#FBBF24'],
             borderColor: '#1E293B',
             hoverOffset: 4
         }]
@@ -1272,6 +1291,7 @@ async function saveOMOrder() {
     }
 
     const data = {
+        personName: form.querySelector('#om-person-selector').value,
         motivo: form.querySelector('#om-motivo').value.trim(),
         cliente: form.querySelector('#om-cliente').value.trim(),
         endereco: form.querySelector('#om-endereco').value.trim(),
@@ -1284,8 +1304,8 @@ async function saveOMOrder() {
         obs: form.querySelector('#om-obs').value.trim(),
     };
 
-    if (!data.motivo || !data.cliente || !data.protocoloNoc) {
-        showStatusMessage('Preencha os campos Motivo, Cliente e Protocolo NOC.', 'error');
+    if (!data.motivo || !data.cliente || !data.protocoloNoc || !data.personName) {
+        showStatusMessage('Preencha os campos Pessoa, Motivo, Cliente e Protocolo NOC.', 'error');
         return;
     }
 
@@ -1340,7 +1360,6 @@ function openCompleteOMModal(orderId) {
     const dateInput = document.getElementById('om-complete-date');
     const timeInput = document.getElementById('om-complete-time');
 
-    // Preenche com data e hora atuais
     const now = new Date();
     dateInput.value = now.toISOString().split('T')[0];
     timeInput.value = now.toTimeString().split(' ')[0].substring(0, 5);
@@ -1591,9 +1610,16 @@ function renderHistoricOMOrders(orders) {
 }
 
 
-function renderOMMetrics() {
-    const startDateStr = document.getElementById('start-date-filter').value;
-    const endDateStr = document.getElementById('end-date-filter').value;
+function renderOMMetrics(useDedicatedFilter = true) {
+    let startDateStr, endDateStr;
+
+    if (useDedicatedFilter) {
+        startDateStr = document.getElementById('om-metrics-start-date').value;
+        endDateStr = document.getElementById('om-metrics-end-date').value;
+    } else {
+        startDateStr = document.getElementById('start-date-filter').value;
+        endDateStr = document.getElementById('end-date-filter').value;
+    }
 
     let ordersInPeriod = localOMOrdersHistoric;
     if (startDateStr && endDateStr) {
@@ -1602,7 +1628,7 @@ function renderOMMetrics() {
 
         ordersInPeriod = localOMOrdersHistoric.filter(order => {
             if (!order.completedAt) return false;
-            const completedDateStr = order.completedAt.substring(0, 10);
+            const completedDateStr = (order.manualCompletedAt || order.completedAt).substring(0, 10);
             const completedNum = parseInt(completedDateStr.replace(/-/g, ''), 10);
             return completedNum >= startNum && completedNum <= endNum;
         });
@@ -1614,7 +1640,7 @@ function renderOMMetrics() {
     // KPI 2: Tempo Médio de Conclusão
     if (ordersInPeriod.length > 0) {
         const totalDurationMs = ordersInPeriod.reduce((sum, order) => {
-            const duration = new Date(order.completedAt).getTime() - new Date(order.createdAt).getTime();
+            const duration = new Date(order.manualCompletedAt || order.completedAt).getTime() - new Date(order.createdAt).getTime();
             return sum + duration;
         }, 0);
         const avgMs = totalDurationMs / ordersInPeriod.length;
@@ -1624,6 +1650,13 @@ function renderOMMetrics() {
     } else {
         document.getElementById('om-avg-time').textContent = '0h 0m';
     }
+
+    // Novos KPIs de SLA
+    const sla30minDelays = ordersInPeriod.filter(o => o.appropriatedAt && (new Date(o.manualCompletedAt || o.completedAt).getTime() - new Date(o.appropriatedAt).getTime()) > 30 * 60 * 1000).length;
+    const sla4hDelays = ordersInPeriod.filter(o => (new Date(o.manualCompletedAt || o.completedAt).getTime() - new Date(o.createdAt).getTime()) > 4 * 60 * 60 * 1000).length;
+    document.getElementById('om-sla-30min-delays').textContent = sla30minDelays;
+    document.getElementById('om-sla-4h-delays').textContent = sla4hDelays;
+
 
     // Gráfico: O.S. por Motivo
     const reasonCounts = ordersInPeriod.reduce((acc, order) => {
@@ -1856,6 +1889,7 @@ function setupEventListeners() {
     
     document.getElementById('om-search-input').addEventListener('input', filterAndRenderOMHistory);
     document.getElementById('om-history-date-filter').addEventListener('change', filterAndRenderOMHistory);
+    document.getElementById('om-metrics-filter-btn').addEventListener('click', () => renderOMMetrics(true));
 
 
     // Mobile Menu
