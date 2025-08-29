@@ -52,6 +52,7 @@ let localReports = [];
 let localOMOrders = [];
 let localOMOrdersHistoric = [];
 let localOMOrdersScheduled = [];
+let localNotifications = [];
 let modalContext = {};
 let agentEvolutionChart, categoryEvolutionChart, fcrVsEscalonadoChart, fcrEscalonadoTrendChart, omReasonChart;
 let currentAnalystName = '';
@@ -364,6 +365,16 @@ function setupFirestoreListener() {
         filterAndRenderOMHistory();
         renderOMMetrics();
     }, (error) => console.error("Erro no listener de O&M (Histórico):", error));
+
+    // Notificações
+    const notificationsRef = query(collection(db, `/artifacts/${appId}/public/data/notifications`), orderBy("createdAt", "desc"), limit(20));
+    onSnapshot(notificationsRef, (querySnapshot) => {
+        localNotifications = [];
+        querySnapshot.forEach((doc) => {
+            localNotifications.push({ id: doc.id, ...doc.data() });
+        });
+        renderNotifications(localNotifications);
+    }, (error) => console.error("Erro no listener de Notificações:", error));
 }
 
 
@@ -1286,6 +1297,7 @@ async function saveOMOrder() {
         createdBy: currentAnalystName,
         completedAt: null,
         completedBy: null,
+        manualCompletedAt: null,
         appropriatedBy: null,
         appropriatedById: null,
         appropriatedAt: null
@@ -1322,25 +1334,45 @@ async function startOMOrder(orderId) {
     }
 }
 
+function openCompleteOMModal(orderId) {
+    const modal = document.getElementById('complete-om-modal');
+    const confirmBtn = document.getElementById('complete-om-modal-confirm-btn');
+    const dateInput = document.getElementById('om-complete-date');
+    const timeInput = document.getElementById('om-complete-time');
 
-async function completeOMOrder(orderId) {
-    const confirmed = await showConfirmationModal(
-        'Concluir Ordem de Serviço',
-        'Você tem certeza que deseja marcar esta O.S. como concluída? A ação não pode ser desfeita.'
-    );
+    // Preenche com data e hora atuais
+    const now = new Date();
+    dateInput.value = now.toISOString().split('T')[0];
+    timeInput.value = now.toTimeString().split(' ')[0].substring(0, 5);
+    
+    confirmBtn.dataset.orderId = orderId;
+    modal.classList.remove('hidden');
+}
 
-    if (confirmed) {
-        const orderRef = doc(db, `/artifacts/${appId}/public/data/o_and_m_orders`, orderId);
-        try {
-            await updateDoc(orderRef, {
-                status: 'concluido',
-                completedAt: new Date().toISOString(),
-                completedBy: currentAnalystName
-            });
-            showStatusMessage('Ordem de Serviço concluída com sucesso!', 'success');
-        } catch (error) {
-            showStatusMessage(`Erro ao concluir O.S.: ${error.message}`, 'error');
-        }
+async function completeOMOrder() {
+    const orderId = document.getElementById('complete-om-modal-confirm-btn').dataset.orderId;
+    const dateValue = document.getElementById('om-complete-date').value;
+    const timeValue = document.getElementById('om-complete-time').value;
+
+    if (!dateValue || !timeValue) {
+        showStatusMessage('Por favor, preencha a data e a hora da conclusão.', 'error');
+        return;
+    }
+
+    const manualTimestamp = new Date(`${dateValue}T${timeValue}`).toISOString();
+
+    const orderRef = doc(db, `/artifacts/${appId}/public/data/o_and_m_orders`, orderId);
+    try {
+        await updateDoc(orderRef, {
+            status: 'concluido',
+            completedAt: new Date().toISOString(),
+            manualCompletedAt: manualTimestamp,
+            completedBy: currentAnalystName
+        });
+        showStatusMessage('Ordem de Serviço concluída com sucesso!', 'success');
+        document.getElementById('complete-om-modal').classList.add('hidden');
+    } catch (error) {
+        showStatusMessage(`Erro ao concluir O.S.: ${error.message}`, 'error');
     }
 }
 
@@ -1430,31 +1462,34 @@ function startSlaTimer() {
 }
 
 function updateSlaStatus() {
-    const cards = document.querySelectorAll('.om-card');
-    cards.forEach(card => {
-        const createdAt = new Date(card.dataset.createdAt);
-        const now = new Date();
+    const now = new Date();
+    localOMOrders.forEach(order => {
+        const card = document.querySelector(`.om-card[data-order-id="${order.id}"]`);
+        if (!card) return;
+
+        const createdAt = new Date(order.createdAt);
         const diffInMinutes = (now.getTime() - createdAt.getTime()) / 60000;
 
         card.classList.remove('border-green-500', 'border-yellow-500', 'border-red-500');
 
         if (diffInMinutes > 240) {
             card.classList.add('border-red-500');
+            createSlaNotification(order, 'SLA_4_HORAS');
         } else if (diffInMinutes > 120) {
             card.classList.add('border-yellow-500');
         } else {
             card.classList.add('border-green-500');
         }
 
-        const appropriatedAtStr = card.dataset.appropriatedAt;
-        if (appropriatedAtStr) {
-            const appropriatedAt = new Date(appropriatedAtStr);
+        if (order.appropriatedAt) {
+            const appropriatedAt = new Date(order.appropriatedAt);
             const diffAppropriatedMinutes = (now.getTime() - appropriatedAt.getTime()) / 60000;
-            const warningEl = document.getElementById(`sla-30min-warning-${card.dataset.orderId}`);
+            const warningEl = document.getElementById(`sla-30min-warning-${order.id}`);
             if (warningEl) {
                 if (diffAppropriatedMinutes > 30) {
                     warningEl.classList.remove('hidden');
                     warningEl.classList.add('flex');
+                    createSlaNotification(order, 'SLA_30_MIN');
                 } else {
                     warningEl.classList.add('hidden');
                     warningEl.classList.remove('flex');
@@ -1462,6 +1497,30 @@ function updateSlaStatus() {
             }
         }
     });
+}
+
+async function createSlaNotification(order, type) {
+    const notificationsRef = collection(db, `/artifacts/${appId}/public/data/notifications`);
+    const q = query(notificationsRef, where("orderId", "==", order.id), where("type", "==", type));
+    
+    try {
+        const existingNotif = await getDocs(q);
+        if (existingNotif.empty) {
+            const message = type === 'SLA_30_MIN' 
+                ? `SLA de 30min estourado para a O.S. "${order.motivo}" (Cliente: ${order.cliente}).`
+                : `SLA de 4h estourado para a O.S. "${order.motivo}" (Cliente: ${order.cliente}).`;
+
+            await addDoc(notificationsRef, {
+                message,
+                orderId: order.id,
+                type,
+                createdAt: new Date().toISOString(),
+                readBy: []
+            });
+        }
+    } catch (error) {
+        console.error("Erro ao criar notificação:", error);
+    }
 }
 
 // Funções de Histórico e Métricas de O&M
@@ -1598,6 +1657,48 @@ function renderOMMetrics() {
     });
 }
 
+function renderNotifications(notifications) {
+    const listEl = document.getElementById('notification-list');
+    const indicatorEl = document.getElementById('notification-indicator');
+    
+    const unreadCount = notifications.filter(n => !n.readBy.includes(currentUserId)).length;
+
+    if (unreadCount > 0) {
+        indicatorEl.classList.remove('hidden');
+    } else {
+        indicatorEl.classList.add('hidden');
+    }
+
+    if (notifications.length === 0) {
+        listEl.innerHTML = '<p class="p-4 text-center text-sm text-slate-400">Nenhuma notificação.</p>';
+        return;
+    }
+
+    listEl.innerHTML = notifications.map(n => {
+        const isRead = n.readBy.includes(currentUserId);
+        const createdAt = new Date(n.createdAt);
+        const timeAgo = Math.round((new Date() - createdAt) / 60000); // in minutes
+        
+        return `
+            <div class="notification-item p-3 border-b border-slate-700 cursor-pointer ${isRead ? 'opacity-60' : 'bg-indigo-900/50'}" data-id="${n.id}" data-order-id="${n.orderId}">
+                <p class="text-sm text-white">${n.message}</p>
+                <p class="text-xs text-slate-400 mt-1">${timeAgo} minutos atrás</p>
+            </div>
+        `;
+    }).join('');
+}
+
+async function markNotificationAsRead(notificationId) {
+    const notifRef = doc(db, `/artifacts/${appId}/public/data/notifications`, notificationId);
+    try {
+        await updateDoc(notifRef, {
+            readBy: arrayUnion(currentUserId)
+        });
+    } catch (error) {
+        console.error("Erro ao marcar notificação como lida:", error);
+    }
+}
+
 
 // --- EVENT LISTENERS ---
 function setupEventListeners() {
@@ -1719,7 +1820,7 @@ function setupEventListeners() {
         if (completeButton) {
             const card = e.target.closest('.om-card');
             const orderId = card.dataset.orderId;
-            if (orderId) completeOMOrder(orderId);
+            if (orderId) openCompleteOMModal(orderId);
         }
 
         const appropriateButton = e.target.closest('.appropriate-om-btn');
@@ -1736,6 +1837,11 @@ function setupEventListeners() {
             if (orderId) releaseOMOrder(orderId);
         }
     });
+
+    document.getElementById('complete-om-modal-cancel-btn').addEventListener('click', () => {
+        document.getElementById('complete-om-modal').classList.add('hidden');
+    });
+    document.getElementById('complete-om-modal-confirm-btn').addEventListener('click', completeOMOrder);
 
     document.getElementById('om-scheduled-list').addEventListener('click', (e) => {
         const startButton = e.target.closest('.start-om-btn');
@@ -1761,6 +1867,22 @@ function setupEventListeners() {
         sidebar.classList.add('-translate-x-full');
         document.getElementById('mobile-menu-overlay').classList.add('hidden');
     });
+
+    // Notificações
+    document.getElementById('notification-bell').addEventListener('click', () => {
+        document.getElementById('notification-panel').classList.toggle('hidden');
+    });
+    document.getElementById('notification-list').addEventListener('click', (e) => {
+        const item = e.target.closest('.notification-item');
+        if(item) {
+            const notifId = item.dataset.id;
+            const orderId = item.dataset.orderId;
+            markNotificationAsRead(notifId);
+            navigateTo('om-page', 'O&M');
+            document.getElementById('notification-panel').classList.add('hidden');
+        }
+    });
+
 
     // Admin Panel
     document.getElementById('add-user-button').addEventListener('click', async () => {

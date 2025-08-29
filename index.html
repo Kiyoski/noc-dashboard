@@ -61,7 +61,22 @@
                             <button id="hamburger-btn" class="md:hidden text-2xl text-white mr-4"><i class="fas fa-bars"></i></button>
                             <h1 id="page-title" class="text-3xl sm:text-4xl font-bold text-white">Início</h1>
                         </div>
-                        <div class="flex items-center">
+                        <div class="flex items-center gap-4">
+                            <!-- Ícone de Notificações -->
+                            <div class="relative">
+                                <button id="notification-bell" class="text-2xl text-slate-400 hover:text-white">
+                                    <i class="fas fa-bell"></i>
+                                    <span id="notification-indicator" class="absolute top-0 right-0 h-3 w-3 bg-red-500 rounded-full border-2 border-slate-900 hidden"></span>
+                                </button>
+                                <div id="notification-panel" class="absolute right-0 mt-2 w-80 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-50 hidden">
+                                    <div class="p-3 border-b border-slate-700">
+                                        <h3 class="font-bold text-white">Notificações</h3>
+                                    </div>
+                                    <div id="notification-list" class="max-h-96 overflow-y-auto">
+                                        <!-- Notificações aqui -->
+                                    </div>
+                                </div>
+                            </div>
                             <span class="text-lg text-slate-400 mr-4 hidden sm:inline">Bem-vindo, <span id="user-name-display" class="font-semibold text-white"></span>!</span>
                             <button id="logout-button" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow-md">Sair</button>
                         </div>
@@ -476,6 +491,28 @@
             <div class="mt-6 flex justify-center space-x-4">
                 <button id="om-copy-btn" class="px-6 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white font-bold"><i class="fas fa-copy mr-2"></i>Copiar Texto</button>
                 <button id="om-copy-modal-close-btn" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg text-white">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOVO MODAL: Concluir O&M com data/hora manual -->
+    <div id="complete-om-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="bg-slate-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 border border-slate-700">
+            <h3 class="text-xl font-bold mb-4 text-white">Concluir Ordem de Serviço</h3>
+            <p class="mb-4 text-slate-300">Confirme a data e hora exata da conclusão da atividade.</p>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="om-complete-date" class="block text-sm font-medium text-slate-300">Data da Conclusão</label>
+                    <input type="date" id="om-complete-date" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                </div>
+                <div>
+                    <label for="om-complete-time" class="block text-sm font-medium text-slate-300">Hora da Conclusão</label>
+                    <input type="time" id="om-complete-time" class="mt-1 block w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end space-x-4">
+                <button id="complete-om-modal-cancel-btn" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 rounded-lg text-white">Cancelar</button>
+                <button id="complete-om-modal-confirm-btn" class="px-4 py-2 bg-green-600 text-white hover:bg-green-700 rounded-lg">Confirmar Conclusão</button>
             </div>
         </div>
     </div>
